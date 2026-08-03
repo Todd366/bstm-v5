@@ -6,3 +6,13 @@ __pycache__/
 .cleanup_backup/
 bstm.db.backup.*
 bstm_pre_*.db
+
+# Python caches
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Local databases and backups
+bstm.db
+bstm_pre_*.db
+bstm.db.backup.*
