@@ -3,6 +3,12 @@ import json
 import psycopg2.extras
 
 from app.db.database import transaction
+from app.services.progression_service import (
+    apply_progression,
+    capability_gain_for_review,
+    RELIABILITY_GAIN_ON_COMPLETE,
+    RELIABILITY_LOSS_ON_CANCEL,
+)
 
 
 def create_trial(assignment_id, title=None, description=None):
@@ -264,6 +270,19 @@ def complete_trial(trial_id, review=None):
         if trial["status"] != "Under Review":
             raise ValueError("Only trials under review can be completed")
 
+        # The review that actually ends up stored is either the one passed
+        # to this call, or (more commonly) the one already recorded by an
+        # earlier review_trial() step. The progression gain must be based
+        # on that same effective value, not just whatever (if anything)
+        # was passed here — otherwise a normal complete() call with no
+        # review argument silently discards the real review score.
+        existing_review_row = db.execute(
+            "SELECT review FROM trials WHERE id = ?",
+            (trial_id,),
+        ).fetchone()
+
+        effective_review = review if review is not None else existing_review_row["review"]
+
         review_param = psycopg2.extras.Json(review) if review is not None else None
 
         db.execute(
@@ -280,6 +299,16 @@ def complete_trial(trial_id, review=None):
         db.execute(
             "UPDATE youth SET completed_trials = completed_trials + 1 WHERE id = ?",
             (trial["youth_id"],),
+        )
+
+        # Progression: a completed trial is real evidence of demonstrated
+        # capability. Gain scales with the review's score if the reviewer
+        # gave one, otherwise a modest default so completion still counts.
+        apply_progression(
+            db,
+            trial["youth_id"],
+            capability_delta=capability_gain_for_review(effective_review),
+            reliability_delta=RELIABILITY_GAIN_ON_COMPLETE,
         )
 
         db.execute(
@@ -329,6 +358,17 @@ def cancel_trial(trial_id, reason=None):
             """,
             (reason, trial_id),
         )
+
+        # Progression: only penalize reliability if the trial had actually
+        # been started (Active/Submitted/Under Review). Cancelling
+        # something that was created but never begun isn't a reliability
+        # failure — nothing was actually abandoned.
+        if trial["status"] != "Created":
+            apply_progression(
+                db,
+                trial["youth_id"],
+                reliability_delta=-RELIABILITY_LOSS_ON_CANCEL,
+            )
 
         db.execute(
             """
