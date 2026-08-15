@@ -1,7 +1,7 @@
 import json
 
-from app.core.ids import generate_id
-from app.core.time import utc_now
+import psycopg2.extras
+
 from app.db.database import transaction
 
 
@@ -10,7 +10,7 @@ LEVEL_WEIGHTS = {
     "Developing": 5,
     "Intermediate": 10,
     "Advanced": 15,
-    "Expert": 20
+    "Expert": 20,
 }
 
 
@@ -20,7 +20,7 @@ def calculate_match_score(
     level,
     verified,
     opportunity_title,
-    opportunity_description
+    opportunity_description,
 ):
 
     score = 0
@@ -48,35 +48,24 @@ def calculate_match_score(
     return min(score, 100)
 
 
-def match_youth_to_opportunities(
-    youth_id
-):
+def match_youth_to_opportunities(youth_id):
+    """Known limitation carried over from the original design: this inner-
+    joins businesses, so department-sourced opportunities (business_id is
+    NULL) never appear here. Not fixed in this port — flagging for a
+    follow-up slice rather than silently changing matching behavior."""
 
     if not youth_id:
-        raise ValueError(
-            "Youth ID is required"
-        )
+        raise ValueError("Youth ID is required")
 
     with transaction() as db:
 
         youth = db.execute(
-            """
-            SELECT
-                id,
-                name
-            FROM youth
-            WHERE id = ?
-            """,
-            (
-                youth_id,
-            )
+            "SELECT id, name FROM youth WHERE id = ?",
+            (youth_id,),
         ).fetchone()
 
         if not youth:
-
-            raise ValueError(
-                "Youth not found"
-            )
+            raise ValueError("Youth not found")
 
         rows = db.execute(
             """
@@ -107,9 +96,7 @@ def match_youth_to_opportunities(
                 OR LOWER(COALESCE(o.description, '')) LIKE '%' || LOWER(c.category) || '%'
             )
             """,
-            (
-                youth_id,
-            )
+            (youth_id,),
         ).fetchall()
 
     results = [dict(row) for row in rows]
@@ -121,7 +108,7 @@ def match_youth_to_opportunities(
             level=result["level"],
             verified=result["verified"],
             opportunity_title=result["title"],
-            opportunity_description=result["description"]
+            opportunity_description=result["description"],
         )
 
     results.sort(key=lambda r: r["match_score"], reverse=True)
@@ -129,12 +116,7 @@ def match_youth_to_opportunities(
     return results
 
 
-def create_opportunity_match(
-    youth_id,
-    opportunity_id,
-    match_score=0,
-    reason=None
-):
+def create_opportunity_match(youth_id, opportunity_id, match_score=0, reason=None):
 
     if not youth_id:
         raise ValueError("Youth ID is required")
@@ -146,7 +128,7 @@ def create_opportunity_match(
 
         youth = db.execute(
             "SELECT id, name FROM youth WHERE id = ?",
-            (youth_id,)
+            (youth_id,),
         ).fetchone()
 
         if not youth:
@@ -154,7 +136,7 @@ def create_opportunity_match(
 
         opportunity = db.execute(
             "SELECT id, business_id, title, status FROM opportunities WHERE id = ?",
-            (opportunity_id,)
+            (opportunity_id,),
         ).fetchone()
 
         if not opportunity:
@@ -162,55 +144,53 @@ def create_opportunity_match(
 
         existing = db.execute(
             "SELECT id FROM opportunity_matches WHERE youth_id = ? AND opportunity_id = ?",
-            (youth_id, opportunity_id)
+            (youth_id, opportunity_id),
         ).fetchone()
 
         if existing:
-            return existing["id"]
+            return str(existing["id"])
 
-        match_id = generate_id("MATCH")
-        created_at = utc_now()
+        # reason is stored as jsonb — wrap non-null values so psycopg2
+        # adapts them correctly (a plain string reason becomes a JSON string).
+        reason_param = psycopg2.extras.Json(reason) if reason is not None else None
 
-        db.execute(
+        row = db.execute(
             """
             INSERT INTO opportunity_matches (
-                id, youth_id, opportunity_id, match_score,
-                reason, status, created_at
+                youth_id, opportunity_id, match_score, reason, status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, 'Suggested')
+            RETURNING id
             """,
-            (match_id, youth_id, opportunity_id, match_score, reason, "Pending", created_at)
-        )
+            (youth_id, opportunity_id, match_score, reason_param),
+        ).fetchone()
+
+        match_id = row["id"]
 
         db.execute(
             """
-            INSERT INTO activity (
-                id, event, actor_id, target_id, details, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "opportunity_matched",
                 youth_id,
                 opportunity_id,
-                json.dumps({
-                    "youth_id": youth_id,
-                    "opportunity_id": opportunity_id,
-                    "match_id": match_id,
-                    "match_score": match_score,
-                    "reason": reason
-                }),
-                created_at
-            )
+                json.dumps(
+                    {
+                        "youth_id": youth_id,
+                        "opportunity_id": opportunity_id,
+                        "match_id": str(match_id),
+                        "match_score": match_score,
+                    }
+                ),
+            ),
         )
 
-    return match_id
+    return str(match_id)
 
 
-def list_youth_matches(
-    youth_id
-):
+def list_youth_matches(youth_id):
 
     if not youth_id:
         raise ValueError("Youth ID is required")
@@ -239,7 +219,7 @@ def list_youth_matches(
             WHERE om.youth_id = ?
             ORDER BY om.match_score DESC, om.created_at DESC
             """,
-            (youth_id,)
+            (youth_id,),
         ).fetchall()
 
     return [dict(row) for row in rows]

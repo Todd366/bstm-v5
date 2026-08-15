@@ -1,7 +1,7 @@
 import json
 
-from app.core.ids import generate_id
-from app.core.time import utc_now
+import psycopg2
+
 from app.db.database import transaction
 
 
@@ -10,79 +10,105 @@ def create_business(
     owner,
     sector,
     location,
-    main_problem
+    main_problem,
 ):
+    """Creates a business profile. Returns the new business's UUID (as str)."""
 
-    business_id = generate_id(
-        "B"
-    )
+    try:
+        with transaction() as db:
+
+            existing = db.execute(
+                """
+                SELECT id
+                FROM businesses
+                WHERE lower(name) = lower(?)
+                """,
+                (name.strip(),),
+            ).fetchone()
+
+            if existing:
+                raise ValueError("Business already exists")
+
+            row = db.execute(
+                """
+                INSERT INTO businesses (
+                    name, owner, sector, location, main_problem
+                )
+                VALUES (?, ?, ?, ?, ?)
+                RETURNING id
+                """,
+                (
+                    name.strip(),
+                    owner.strip(),
+                    sector.strip(),
+                    location.strip(),
+                    main_problem.strip(),
+                ),
+            ).fetchone()
+
+            business_id = row["id"]
+
+            db.execute(
+                """
+                INSERT INTO activity (event, actor_id, target_id, details)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "business_activated",
+                    business_id,
+                    business_id,
+                    json.dumps({"name": name, "sector": sector}),
+                ),
+            )
+
+    except psycopg2.errors.UniqueViolation:
+        raise ValueError("Business already exists")
+
+    return str(business_id)
+
+
+def get_business(business_id):
 
     with transaction() as db:
 
-        existing = db.execute(
-            """
-            SELECT id
-            FROM businesses
-            WHERE name = ? COLLATE NOCASE
-            """,
-            (
-                name.strip(),
-            )
+        row = db.execute(
+            "SELECT * FROM businesses WHERE id = ?",
+            (business_id,),
         ).fetchone()
 
-        if existing:
+    return dict(row) if row else None
 
-            raise ValueError(
-                "Business already exists"
-            )
+
+def list_businesses(limit=50, offset=0):
+
+    with transaction() as db:
+
+        rows = db.execute(
+            """
+            SELECT * FROM businesses
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def set_audit_status(business_id, status):
+
+    if status not in ("Pending", "InProgress", "Completed"):
+        raise ValueError(f"Invalid audit_status: {status}")
+
+    with transaction() as db:
 
         db.execute(
             """
-            INSERT INTO businesses (
-                id,
-                name,
-                owner,
-                sector,
-                location,
-                main_problem,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            UPDATE businesses
+            SET audit_status = ?, updated_at = now()
+            WHERE id = ?
             """,
-            (
-                business_id,
-                name.strip(),
-                owner.strip(),
-                sector.strip(),
-                location.strip(),
-                main_problem.strip(),
-                utc_now()
-            )
+            (status, business_id),
         )
 
-        db.execute(
-            """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                generate_id("EV"),
-                "business_activated",
-                business_id,
-                business_id,
-                json.dumps({
-                    "name": name,
-                    "sector": sector
-                }),
-                utc_now()
-            )
-        )
-
-    return business_id
+    return get_business(business_id)

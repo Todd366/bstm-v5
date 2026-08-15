@@ -1,7 +1,5 @@
 import json
 
-from app.core.ids import generate_id
-from app.core.time import utc_now
 from app.db.database import transaction
 
 
@@ -10,17 +8,13 @@ VALID_STATUSES = [
     "Accepted",
     "Declined",
     "Cancelled",
-    "Completed"
+    "Completed",
 ]
 
 YOUTH_REVENUE_SHARE = 0.70
 
 
-def create_assignment(
-    youth_id,
-    opportunity_id,
-    match_id=None
-):
+def create_assignment(youth_id, opportunity_id, match_id=None):
 
     if not youth_id:
         raise ValueError("Youth ID is required")
@@ -32,7 +26,7 @@ def create_assignment(
 
         youth = db.execute(
             "SELECT id, name FROM youth WHERE id = ?",
-            (youth_id,)
+            (youth_id,),
         ).fetchone()
 
         if not youth:
@@ -40,7 +34,7 @@ def create_assignment(
 
         opportunity = db.execute(
             "SELECT id, business_id, title, description, status FROM opportunities WHERE id = ?",
-            (opportunity_id,)
+            (opportunity_id,),
         ).fetchone()
 
         if not opportunity:
@@ -53,69 +47,74 @@ def create_assignment(
 
             match = db.execute(
                 "SELECT id, youth_id, opportunity_id FROM opportunity_matches WHERE id = ?",
-                (match_id,)
+                (match_id,),
             ).fetchone()
 
             if not match:
                 raise ValueError("Opportunity match not found")
 
-            if match["youth_id"] != youth_id:
+            if str(match["youth_id"]) != str(youth_id):
                 raise ValueError("Match does not belong to youth")
 
-            if match["opportunity_id"] != opportunity_id:
+            if str(match["opportunity_id"]) != str(opportunity_id):
                 raise ValueError("Match does not belong to opportunity")
 
         existing = db.execute(
             "SELECT id, status FROM opportunity_assignments WHERE youth_id = ? AND opportunity_id = ?",
-            (youth_id, opportunity_id)
+            (youth_id, opportunity_id),
         ).fetchone()
 
         if existing:
             raise ValueError("Assignment already exists")
 
-        assignment_id = generate_id("ASSIGN")
-        created_at = utc_now()
-
-        db.execute(
+        row = db.execute(
             """
             INSERT INTO opportunity_assignments (
-                id, youth_id, opportunity_id, match_id,
-                status, assigned_at, accepted_at, completed_at, created_at
+                youth_id, opportunity_id, match_id, status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'Pending')
+            RETURNING id
             """,
-            (assignment_id, youth_id, opportunity_id, match_id, "Pending", created_at, None, None, created_at)
+            (youth_id, opportunity_id, match_id),
+        ).fetchone()
+
+        assignment_id = row["id"]
+
+        # NOTE: not in the original service — closes the opportunity so a
+        # second youth can't also be assigned to it while this one is
+        # pending/accepted. Reopened on decline/cancel below.
+        db.execute(
+            "UPDATE opportunities SET status = 'Assigned', updated_at = now() WHERE id = ?",
+            (opportunity_id,),
         )
 
         db.execute(
             """
-            INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "opportunity_assigned",
                 youth_id,
                 assignment_id,
-                json.dumps({
-                    "assignment_id": assignment_id,
-                    "youth_id": youth_id,
-                    "youth_name": youth["name"],
-                    "opportunity_id": opportunity_id,
-                    "opportunity_title": opportunity["title"],
-                    "match_id": match_id,
-                    "status": "Pending"
-                }),
-                created_at
-            )
+                json.dumps(
+                    {
+                        "assignment_id": str(assignment_id),
+                        "youth_id": youth_id,
+                        "youth_name": youth["name"],
+                        "opportunity_id": opportunity_id,
+                        "opportunity_title": opportunity["title"],
+                        "match_id": match_id,
+                        "status": "Pending",
+                    }
+                ),
+            ),
         )
 
-    return assignment_id
+    return str(assignment_id)
 
 
-def accept_assignment(
-    assignment_id
-):
+def accept_assignment(assignment_id):
 
     if not assignment_id:
         raise ValueError("Assignment ID is required")
@@ -131,7 +130,7 @@ def accept_assignment(
             JOIN opportunities o ON o.id = oa.opportunity_id
             WHERE oa.id = ?
             """,
-            (assignment_id,)
+            (assignment_id,),
         ).fetchone()
 
         if not assignment:
@@ -140,41 +139,44 @@ def accept_assignment(
         if assignment["status"] != "Pending":
             raise ValueError("Only pending assignments can be accepted")
 
-        accepted_at = utc_now()
-
         db.execute(
-            "UPDATE opportunity_assignments SET status = ?, accepted_at = ? WHERE id = ?",
-            ("Accepted", accepted_at, assignment_id)
+            "UPDATE opportunity_assignments SET status = 'Accepted', accepted_at = now() WHERE id = ?",
+            (assignment_id,),
+        )
+
+        # NOTE: not in the original service — moves the opportunity into
+        # InProgress once someone has actually accepted the work.
+        db.execute(
+            "UPDATE opportunities SET status = 'InProgress', updated_at = now() WHERE id = ?",
+            (assignment["opportunity_id"],),
         )
 
         db.execute(
             """
-            INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "assignment_accepted",
                 assignment["youth_id"],
                 assignment_id,
-                json.dumps({
-                    "assignment_id": assignment_id,
-                    "youth_id": assignment["youth_id"],
-                    "youth_name": assignment["youth_name"],
-                    "opportunity_id": assignment["opportunity_id"],
-                    "opportunity_title": assignment["opportunity_title"],
-                    "status": "Accepted"
-                }),
-                accepted_at
-            )
+                json.dumps(
+                    {
+                        "assignment_id": str(assignment_id),
+                        "youth_id": str(assignment["youth_id"]),
+                        "youth_name": assignment["youth_name"],
+                        "opportunity_id": str(assignment["opportunity_id"]),
+                        "opportunity_title": assignment["opportunity_title"],
+                        "status": "Accepted",
+                    }
+                ),
+            ),
         )
 
-    return assignment_id
+    return str(assignment_id)
 
 
-def decline_assignment(
-    assignment_id
-):
+def decline_assignment(assignment_id):
 
     if not assignment_id:
         raise ValueError("Assignment ID is required")
@@ -190,7 +192,7 @@ def decline_assignment(
             JOIN opportunities o ON o.id = oa.opportunity_id
             WHERE oa.id = ?
             """,
-            (assignment_id,)
+            (assignment_id,),
         ).fetchone()
 
         if not assignment:
@@ -199,41 +201,44 @@ def decline_assignment(
         if assignment["status"] != "Pending":
             raise ValueError("Only pending assignments can be declined")
 
-        declined_at = utc_now()
-
         db.execute(
-            "UPDATE opportunity_assignments SET status = ? WHERE id = ?",
-            ("Declined", assignment_id)
+            "UPDATE opportunity_assignments SET status = 'Declined' WHERE id = ?",
+            (assignment_id,),
+        )
+
+        # NOTE: not in the original service — reopens the opportunity so
+        # another youth can be matched/assigned to it.
+        db.execute(
+            "UPDATE opportunities SET status = 'Open', updated_at = now() WHERE id = ?",
+            (assignment["opportunity_id"],),
         )
 
         db.execute(
             """
-            INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "assignment_declined",
                 assignment["youth_id"],
                 assignment_id,
-                json.dumps({
-                    "assignment_id": assignment_id,
-                    "youth_id": assignment["youth_id"],
-                    "youth_name": assignment["youth_name"],
-                    "opportunity_id": assignment["opportunity_id"],
-                    "opportunity_title": assignment["opportunity_title"],
-                    "status": "Declined"
-                }),
-                declined_at
-            )
+                json.dumps(
+                    {
+                        "assignment_id": str(assignment_id),
+                        "youth_id": str(assignment["youth_id"]),
+                        "youth_name": assignment["youth_name"],
+                        "opportunity_id": str(assignment["opportunity_id"]),
+                        "opportunity_title": assignment["opportunity_title"],
+                        "status": "Declined",
+                    }
+                ),
+            ),
         )
 
-    return assignment_id
+    return str(assignment_id)
 
 
-def cancel_assignment(
-    assignment_id
-):
+def cancel_assignment(assignment_id):
 
     if not assignment_id:
         raise ValueError("Assignment ID is required")
@@ -242,7 +247,7 @@ def cancel_assignment(
 
         assignment = db.execute(
             "SELECT id, youth_id, opportunity_id, status FROM opportunity_assignments WHERE id = ?",
-            (assignment_id,)
+            (assignment_id,),
         ).fetchone()
 
         if not assignment:
@@ -251,39 +256,42 @@ def cancel_assignment(
         if assignment["status"] in ["Completed", "Cancelled", "Declined"]:
             raise ValueError("Assignment cannot be cancelled")
 
-        cancelled_at = utc_now()
-
         db.execute(
-            "UPDATE opportunity_assignments SET status = ? WHERE id = ?",
-            ("Cancelled", assignment_id)
+            "UPDATE opportunity_assignments SET status = 'Cancelled' WHERE id = ?",
+            (assignment_id,),
+        )
+
+        # NOTE: not in the original service — reopens the opportunity,
+        # mirroring the decline path above.
+        db.execute(
+            "UPDATE opportunities SET status = 'Open', updated_at = now() WHERE id = ?",
+            (assignment["opportunity_id"],),
         )
 
         db.execute(
             """
-            INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "assignment_cancelled",
                 assignment["youth_id"],
                 assignment_id,
-                json.dumps({
-                    "assignment_id": assignment_id,
-                    "youth_id": assignment["youth_id"],
-                    "opportunity_id": assignment["opportunity_id"],
-                    "status": "Cancelled"
-                }),
-                cancelled_at
-            )
+                json.dumps(
+                    {
+                        "assignment_id": str(assignment_id),
+                        "youth_id": str(assignment["youth_id"]),
+                        "opportunity_id": str(assignment["opportunity_id"]),
+                        "status": "Cancelled",
+                    }
+                ),
+            ),
         )
 
-    return assignment_id
+    return str(assignment_id)
 
 
-def complete_assignment(
-    assignment_id
-):
+def complete_assignment(assignment_id):
 
     if not assignment_id:
         raise ValueError("Assignment ID is required")
@@ -297,7 +305,7 @@ def complete_assignment(
             JOIN opportunities o ON o.id = oa.opportunity_id
             WHERE oa.id = ?
             """,
-            (assignment_id,)
+            (assignment_id,),
         ).fetchone()
 
         if not assignment:
@@ -306,19 +314,23 @@ def complete_assignment(
         if assignment["status"] != "Accepted":
             raise ValueError("Only accepted assignments can be completed")
 
-        completed_at = utc_now()
-
         db.execute(
-            "UPDATE opportunity_assignments SET status = ?, completed_at = ? WHERE id = ?",
-            ("Completed", completed_at, assignment_id)
+            "UPDATE opportunity_assignments SET status = 'Completed', completed_at = now() WHERE id = ?",
+            (assignment_id,),
+        )
+
+        # NOTE: not in the original service.
+        db.execute(
+            "UPDATE opportunities SET status = 'Completed', updated_at = now() WHERE id = ?",
+            (assignment["opportunity_id"],),
         )
 
         db.execute(
             "UPDATE youth SET completed_opportunities = completed_opportunities + 1 WHERE id = ?",
-            (assignment["youth_id"],)
+            (assignment["youth_id"],),
         )
 
-        budget = assignment["budget"] or 0
+        budget = float(assignment["budget"] or 0)
         youth_share = round(budget * YOUTH_REVENUE_SHARE, 2)
         ecosystem_share = round(budget - youth_share, 2)
 
@@ -326,57 +338,55 @@ def complete_assignment(
 
             db.execute(
                 "UPDATE youth SET revenue = revenue + ? WHERE id = ?",
-                (youth_share, assignment["youth_id"])
+                (youth_share, assignment["youth_id"]),
             )
 
             db.execute(
                 """
-                INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO activity (event, actor_id, target_id, details)
+                VALUES (?, ?, ?, ?)
                 """,
                 (
-                    generate_id("EV"),
                     "revenue_distributed",
                     assignment["youth_id"],
                     assignment_id,
-                    json.dumps({
-                        "assignment_id": assignment_id,
-                        "youth_id": assignment["youth_id"],
-                        "opportunity_id": assignment["opportunity_id"],
-                        "budget": budget,
-                        "youth_share": youth_share,
-                        "ecosystem_share": ecosystem_share
-                    }),
-                    completed_at
-                )
+                    json.dumps(
+                        {
+                            "assignment_id": str(assignment_id),
+                            "youth_id": str(assignment["youth_id"]),
+                            "opportunity_id": str(assignment["opportunity_id"]),
+                            "budget": budget,
+                            "youth_share": youth_share,
+                            "ecosystem_share": ecosystem_share,
+                        }
+                    ),
+                ),
             )
 
         db.execute(
             """
-            INSERT INTO activity (id, event, actor_id, target_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "assignment_completed",
                 assignment["youth_id"],
                 assignment_id,
-                json.dumps({
-                    "assignment_id": assignment_id,
-                    "youth_id": assignment["youth_id"],
-                    "opportunity_id": assignment["opportunity_id"],
-                    "status": "Completed"
-                }),
-                completed_at
-            )
+                json.dumps(
+                    {
+                        "assignment_id": str(assignment_id),
+                        "youth_id": str(assignment["youth_id"]),
+                        "opportunity_id": str(assignment["opportunity_id"]),
+                        "status": "Completed",
+                    }
+                ),
+            ),
         )
 
-    return assignment_id
+    return str(assignment_id)
 
 
-def get_assignment(
-    assignment_id
-):
+def get_assignment(assignment_id):
 
     if not assignment_id:
         raise ValueError("Assignment ID is required")
@@ -395,7 +405,7 @@ def get_assignment(
             JOIN opportunities o ON o.id = oa.opportunity_id
             WHERE oa.id = ?
             """,
-            (assignment_id,)
+            (assignment_id,),
         ).fetchone()
 
     if not row:
@@ -404,9 +414,7 @@ def get_assignment(
     return dict(row)
 
 
-def list_youth_assignments(
-    youth_id
-):
+def list_youth_assignments(youth_id):
 
     if not youth_id:
         raise ValueError("Youth ID is required")
@@ -424,15 +432,13 @@ def list_youth_assignments(
             WHERE oa.youth_id = ?
             ORDER BY oa.created_at DESC
             """,
-            (youth_id,)
+            (youth_id,),
         ).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def list_opportunity_assignments(
-    opportunity_id
-):
+def list_opportunity_assignments(opportunity_id):
 
     if not opportunity_id:
         raise ValueError("Opportunity ID is required")
@@ -449,7 +455,7 @@ def list_opportunity_assignments(
             WHERE oa.opportunity_id = ?
             ORDER BY oa.created_at DESC
             """,
-            (opportunity_id,)
+            (opportunity_id,),
         ).fetchall()
 
     return [dict(row) for row in rows]

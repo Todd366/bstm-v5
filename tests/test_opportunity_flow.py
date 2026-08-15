@@ -1,10 +1,8 @@
-import os
-import tempfile
+from tests.helpers import _is_valid_uuid
 
 import pytest
 
-import app.core.config as config
-import app.db.database as database
+from app.db.database import transaction
 
 from app.services.business_service import (
     create_business
@@ -15,39 +13,6 @@ from app.services.opportunity_service import (
     get_opportunity,
     list_opportunities
 )
-
-
-@pytest.fixture
-def test_database():
-
-    original_path = config.DATABASE_PATH
-
-    temp = tempfile.NamedTemporaryFile(
-        delete=False
-    )
-
-    temp.close()
-
-    config.DATABASE_PATH = temp.name
-    database.DATABASE_PATH = temp.name
-
-    database.initialize_database()
-
-    try:
-
-        yield
-
-    finally:
-
-        config.DATABASE_PATH = original_path
-        database.DATABASE_PATH = original_path
-
-        if os.path.exists(
-            temp.name
-        ):
-            os.unlink(
-                temp.name
-            )
 
 
 def test_create_opportunity_for_existing_business(
@@ -68,8 +33,8 @@ def test_create_opportunity_for_existing_business(
         description="Create a basic digital presence."
     )
 
-    assert opportunity_id.startswith(
-        "OP-"
+    assert _is_valid_uuid(
+        opportunity_id
     )
 
     opportunity = get_opportunity(
@@ -106,7 +71,7 @@ def test_opportunity_updates_business_counter(
         title="Marketing Opportunity"
     )
 
-    with database.get_connection() as db:
+    with transaction() as db:
 
         row = db.execute(
             """
@@ -119,7 +84,7 @@ def test_opportunity_updates_business_counter(
             )
         ).fetchone()
 
-    assert row[0] == 1
+    assert row["opportunities_generated"] == 1
 
 
 def test_opportunity_creates_activity_event(
@@ -139,7 +104,7 @@ def test_opportunity_creates_activity_event(
         title="Website Development"
     )
 
-    with database.get_connection() as db:
+    with transaction() as db:
 
         row = db.execute(
             """
@@ -176,7 +141,7 @@ def test_create_opportunity_requires_existing_business(
     ):
 
         create_opportunity(
-            business_id="B-does-not-exist",
+            business_id="00000000-0000-0000-0000-000000000000",
             title="Invalid Opportunity"
         )
 

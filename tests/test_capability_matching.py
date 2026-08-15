@@ -1,10 +1,4 @@
-import os
-import tempfile
-
-import pytest
-
-import app.core.config as config
-import app.db.database as database
+from tests.helpers import _is_valid_uuid
 
 from app.services.business_service import (
     create_business
@@ -31,42 +25,6 @@ from app.services.youth_service import (
 )
 
 
-@pytest.fixture
-def test_database():
-
-    original_path = config.DATABASE_PATH
-
-    temp = tempfile.NamedTemporaryFile(
-        delete=False
-    )
-
-    temp.close()
-
-    config.DATABASE_PATH = temp.name
-
-    database.DATABASE_PATH = temp.name
-
-    database.initialize_database()
-
-    database.ensure_slice2_schema()
-
-    try:
-
-        yield
-
-    finally:
-
-        config.DATABASE_PATH = original_path
-
-        database.DATABASE_PATH = original_path
-
-        if os.path.exists(
-            temp.name
-        ):
-
-            os.unlink(
-                temp.name
-            )
 
 
 def test_create_capability(
@@ -79,8 +37,8 @@ def test_create_capability(
         description="Building websites and web applications."
     )
 
-    assert capability_id.startswith(
-        "CAP-"
+    assert _is_valid_uuid(
+        capability_id
     )
 
 
@@ -93,7 +51,6 @@ def test_assign_capability_to_youth(
         location="Gaborone",
         passion="Technology",
         goal="Become a developer",
-        skills="HTML, CSS"
     )
 
     capability_id = create_capability(
@@ -109,8 +66,8 @@ def test_assign_capability_to_youth(
         )
     )
 
-    assert youth_capability_id.startswith(
-        "YC-"
+    assert _is_valid_uuid(
+        youth_capability_id
     )
 
     records = list_youth_capabilities(
@@ -137,7 +94,6 @@ def test_match_youth_to_matching_opportunity(
         location="Gaborone",
         passion="Technology",
         goal="Build websites",
-        skills="HTML, CSS, JavaScript"
     )
 
     capability_id = create_capability(
@@ -189,7 +145,6 @@ def test_non_matching_youth_is_not_matched(
         location="Gaborone",
         passion="Marketing",
         goal="Become a marketer",
-        skills="Social media"
     )
 
     capability_id = create_capability(
@@ -254,8 +209,8 @@ def test_create_opportunity_match(
         reason="Youth has relevant software development capability."
     )
 
-    assert match_id.startswith(
-        "MATCH-"
+    assert _is_valid_uuid(
+        match_id
     )
 
     records = list_youth_matches(
@@ -274,7 +229,7 @@ def test_create_opportunity_match(
 
     assert records[0][
         "status"
-    ] == "Pending"
+    ] == "Suggested"
 
 
 def test_duplicate_match_is_not_created(

@@ -1,37 +1,21 @@
-from app.core.config import (
-    APP_NAME,
-    APP_VERSION,
-    ENVIRONMENT
-)
-
-from app.db.database import (
-    get_connection
-)
+from app.core.config import APP_NAME, APP_VERSION, ENVIRONMENT
+from app.db.database import transaction
 
 
 def system_health():
 
-    with get_connection() as db:
+    with transaction() as db:
 
-        db.execute(
-            "SELECT 1"
-        ).fetchone()
+        db.execute("SELECT 1").fetchone()
 
-        youth = db.execute(
-            "SELECT COUNT(*) FROM youth"
-        ).fetchone()[0]
-
+        youth = db.execute("SELECT COUNT(*) AS count FROM youth").fetchone()["count"]
         businesses = db.execute(
-            "SELECT COUNT(*) FROM businesses"
-        ).fetchone()[0]
-
+            "SELECT COUNT(*) AS count FROM businesses"
+        ).fetchone()["count"]
         opportunities = db.execute(
-            "SELECT COUNT(*) FROM opportunities"
-        ).fetchone()[0]
-
-        trials = db.execute(
-            "SELECT COUNT(*) FROM trials"
-        ).fetchone()[0]
+            "SELECT COUNT(*) AS count FROM opportunities"
+        ).fetchone()["count"]
+        trials = db.execute("SELECT COUNT(*) AS count FROM trials").fetchone()["count"]
 
     return {
         "status": "ok",
@@ -43,6 +27,6 @@ def system_health():
             "youth": youth,
             "businesses": businesses,
             "opportunities": opportunities,
-            "trials": trials
-        }
+            "trials": trials,
+        },
     }

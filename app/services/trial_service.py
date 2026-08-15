@@ -1,636 +1,376 @@
 import json
 
-from app.core.ids import generate_id
-from app.core.time import utc_now
+import psycopg2.extras
 
-from app.db.database import (
-    get_connection,
-    transaction
-)
+from app.db.database import transaction
 
-def create_trial(
-    assignment_id,
-    title=None,
-    description=None
-):
+
+def create_trial(assignment_id, title=None, description=None):
 
     if not assignment_id:
-        raise ValueError(
-            "Assignment ID is required"
-        )
+        raise ValueError("Assignment ID is required")
 
     with transaction() as db:
 
         assignment = db.execute(
             """
-            SELECT
-                id,
-                youth_id,
-                opportunity_id,
-                status
+            SELECT id, youth_id, opportunity_id, status
             FROM opportunity_assignments
             WHERE id = ?
             """,
-            (
-                assignment_id,
-            )
+            (assignment_id,),
         ).fetchone()
 
         if not assignment:
-
-            raise ValueError(
-                "Assignment not found"
-            )
+            raise ValueError("Assignment not found")
 
         if assignment["status"] != "Accepted":
-
-            raise ValueError(
-                "Only accepted assignments can create trials"
-            )
+            raise ValueError("Only accepted assignments can create trials")
 
         existing = db.execute(
-            """
-            SELECT id
-            FROM trials
-            WHERE assignment_id = ?
-            """,
-            (
-                assignment_id,
-            )
+            "SELECT id FROM trials WHERE assignment_id = ?",
+            (assignment_id,),
         ).fetchone()
 
         if existing:
-
-            raise ValueError(
-                "Trial already exists for this assignment"
-            )
+            raise ValueError("Trial already exists for this assignment")
 
         opportunity = db.execute(
-            """
-            SELECT
-                title,
-                description
-            FROM opportunities
-            WHERE id = ?
-            """,
-            (
-                assignment["opportunity_id"],
-            )
+            "SELECT title, description FROM opportunities WHERE id = ?",
+            (assignment["opportunity_id"],),
         ).fetchone()
 
-        trial_id = generate_id(
-            "TRIAL"
-        )
-
-        created_at = utc_now()
-
-        trial_title = (
-            title
-            if title
-            else opportunity["title"]
-        )
-
+        trial_title = title if title else opportunity["title"]
         trial_description = (
-            description
-            if description is not None
-            else opportunity["description"]
+            description if description is not None else opportunity["description"]
         )
 
-        db.execute(
+        row = db.execute(
             """
             INSERT INTO trials (
-                id,
-                assignment_id,
-                opportunity_id,
-                youth_id,
-                title,
-                description,
-                status,
-                created_at
+                assignment_id, title, description, status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'Created')
+            RETURNING id
             """,
-            (
-                trial_id,
-                assignment["id"],
-                assignment["opportunity_id"],
-                assignment["youth_id"],
-                trial_title,
-                trial_description,
-                "Created",
-                created_at
-            )
-        )
+            (assignment_id, trial_title, trial_description),
+        ).fetchone()
+
+        trial_id = row["id"]
 
         db.execute(
             """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "trial_created",
                 assignment["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": assignment["id"],
-                    "youth_id": assignment["youth_id"],
-                    "opportunity_id": assignment["opportunity_id"],
-                    "status": "Created"
-                }),
-                created_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(assignment["id"]),
+                        "youth_id": str(assignment["youth_id"]),
+                        "opportunity_id": str(assignment["opportunity_id"]),
+                        "status": "Created",
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def start_trial(
-    trial_id
-):
+def _get_trial_with_assignment(db, trial_id):
+    """Not in the original — the original trials table stored youth_id and
+    opportunity_id directly on the row; this schema derives them via the
+    assignment instead, so every status-transition function needs this join
+    rather than a plain SELECT * FROM trials WHERE id = ?."""
+
+    return db.execute(
+        """
+        SELECT
+            t.id, t.status, t.assignment_id,
+            oa.youth_id, oa.opportunity_id
+        FROM trials t
+        JOIN opportunity_assignments oa ON oa.id = t.assignment_id
+        WHERE t.id = ?
+        """,
+        (trial_id,),
+    ).fetchone()
+
+
+def start_trial(trial_id):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
     with transaction() as db:
 
-        trial = db.execute(
-            """
-            SELECT
-                id,
-                youth_id,
-                assignment_id,
-                opportunity_id,
-                status
-            FROM trials
-            WHERE id = ?
-            """,
-            (
-                trial_id,
-            )
-        ).fetchone()
+        trial = _get_trial_with_assignment(db, trial_id)
 
         if not trial:
-
-            raise ValueError(
-                "Trial not found"
-            )
+            raise ValueError("Trial not found")
 
         if trial["status"] != "Created":
-
-            raise ValueError(
-                "Only created trials can be started"
-            )
-
-        started_at = utc_now()
+            raise ValueError("Only created trials can be started")
 
         db.execute(
-            """
-            UPDATE trials
-            SET status = ?,
-                started_at = ?
-            WHERE id = ?
-            """,
-            (
-                "Active",
-                started_at,
-                trial_id
-            )
+            "UPDATE trials SET status = 'Active', started_at = now() WHERE id = ?",
+            (trial_id,),
         )
 
         db.execute(
             """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "trial_started",
                 trial["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": trial["assignment_id"],
-                    "youth_id": trial["youth_id"],
-                    "opportunity_id": trial["opportunity_id"],
-                    "status": "Active"
-                }),
-                started_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(trial["assignment_id"]),
+                        "youth_id": str(trial["youth_id"]),
+                        "opportunity_id": str(trial["opportunity_id"]),
+                        "status": "Active",
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def submit_trial(
-    trial_id,
-    submission=None
-):
+def submit_trial(trial_id, submission=None):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
     with transaction() as db:
 
-        trial = db.execute(
-            """
-            SELECT
-                id,
-                youth_id,
-                assignment_id,
-                opportunity_id,
-                status
-            FROM trials
-            WHERE id = ?
-            """,
-            (
-                trial_id,
-            )
-        ).fetchone()
+        trial = _get_trial_with_assignment(db, trial_id)
 
         if not trial:
-
-            raise ValueError(
-                "Trial not found"
-            )
+            raise ValueError("Trial not found")
 
         if trial["status"] != "Active":
+            raise ValueError("Only active trials can be submitted")
 
-            raise ValueError(
-                "Only active trials can be submitted"
-            )
-
-        submitted_at = utc_now()
+        # submission is jsonb — wrap non-null values so psycopg2 adapts
+        # them correctly.
+        submission_param = (
+            psycopg2.extras.Json(submission) if submission is not None else None
+        )
 
         db.execute(
             """
             UPDATE trials
-            SET status = ?,
-                submission = ?,
-                submitted_at = ?
+            SET status = 'Submitted', submission = ?, submitted_at = now()
             WHERE id = ?
             """,
-            (
-                "Submitted",
-                submission,
-                submitted_at,
-                trial_id
-            )
+            (submission_param, trial_id),
         )
 
         db.execute(
             """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "trial_submitted",
                 trial["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": trial["assignment_id"],
-                    "youth_id": trial["youth_id"],
-                    "opportunity_id": trial["opportunity_id"],
-                    "status": "Submitted"
-                }),
-                submitted_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(trial["assignment_id"]),
+                        "youth_id": str(trial["youth_id"]),
+                        "opportunity_id": str(trial["opportunity_id"]),
+                        "status": "Submitted",
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def review_trial(
-    trial_id,
-    review=None
-):
+def review_trial(trial_id, review=None):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
     with transaction() as db:
 
-        trial = db.execute(
-            """
-            SELECT
-                id,
-                youth_id,
-                assignment_id,
-                opportunity_id,
-                status
-            FROM trials
-            WHERE id = ?
-            """,
-            (
-                trial_id,
-            )
-        ).fetchone()
+        trial = _get_trial_with_assignment(db, trial_id)
 
         if not trial:
-
-            raise ValueError(
-                "Trial not found"
-            )
+            raise ValueError("Trial not found")
 
         if trial["status"] != "Submitted":
+            raise ValueError("Only submitted trials can be reviewed")
 
-            raise ValueError(
-                "Only submitted trials can be reviewed"
-            )
-
-        reviewed_at = utc_now()
+        review_param = psycopg2.extras.Json(review) if review is not None else None
 
         db.execute(
             """
             UPDATE trials
-            SET status = ?,
-                review = ?,
-                reviewed_at = ?
+            SET status = 'Under Review', review = ?, reviewed_at = now()
             WHERE id = ?
             """,
-            (
-                "Under Review",
-                review,
-                reviewed_at,
-                trial_id
-            )
+            (review_param, trial_id),
         )
 
         db.execute(
             """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "trial_review_started",
                 trial["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": trial["assignment_id"],
-                    "youth_id": trial["youth_id"],
-                    "opportunity_id": trial["opportunity_id"],
-                    "status": "Under Review"
-                }),
-                reviewed_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(trial["assignment_id"]),
+                        "youth_id": str(trial["youth_id"]),
+                        "opportunity_id": str(trial["opportunity_id"]),
+                        "status": "Under Review",
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def complete_trial(
-    trial_id,
-    review=None
-):
+def complete_trial(trial_id, review=None):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
     with transaction() as db:
 
-        trial = db.execute(
-            """
-            SELECT
-                id,
-                youth_id,
-                assignment_id,
-                opportunity_id,
-                status
-            FROM trials
-            WHERE id = ?
-            """,
-            (
-                trial_id,
-            )
-        ).fetchone()
+        trial = _get_trial_with_assignment(db, trial_id)
 
         if not trial:
-
-            raise ValueError(
-                "Trial not found"
-            )
+            raise ValueError("Trial not found")
 
         if trial["status"] != "Under Review":
+            raise ValueError("Only trials under review can be completed")
 
-            raise ValueError(
-                "Only trials under review can be completed"
-            )
-
-        completed_at = utc_now()
+        review_param = psycopg2.extras.Json(review) if review is not None else None
 
         db.execute(
             """
             UPDATE trials
-            SET status = ?,
+            SET status = 'Completed',
                 review = COALESCE(?, review),
-                completed_at = ?
+                completed_at = now()
             WHERE id = ?
             """,
-            (
-                "Completed",
-                review,
-                completed_at,
-                trial_id
-            )
+            (review_param, trial_id),
+        )
+
+        db.execute(
+            "UPDATE youth SET completed_trials = completed_trials + 1 WHERE id = ?",
+            (trial["youth_id"],),
         )
 
         db.execute(
             """
-            UPDATE youth
-            SET completed_trials =
-                completed_trials + 1
-            WHERE id = ?
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                trial["youth_id"],
-            )
-        )
-
-        db.execute(
-            """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                generate_id("EV"),
                 "trial_completed",
                 trial["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": trial["assignment_id"],
-                    "youth_id": trial["youth_id"],
-                    "opportunity_id": trial["opportunity_id"],
-                    "status": "Completed"
-                }),
-                completed_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(trial["assignment_id"]),
+                        "youth_id": str(trial["youth_id"]),
+                        "opportunity_id": str(trial["opportunity_id"]),
+                        "status": "Completed",
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def cancel_trial(
-    trial_id,
-    reason=None
-):
+def cancel_trial(trial_id, reason=None):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
     with transaction() as db:
 
-        trial = db.execute(
-            """
-            SELECT
-                id,
-                youth_id,
-                assignment_id,
-                opportunity_id,
-                status
-            FROM trials
-            WHERE id = ?
-            """,
-            (
-                trial_id,
-            )
-        ).fetchone()
+        trial = _get_trial_with_assignment(db, trial_id)
 
         if not trial:
+            raise ValueError("Trial not found")
 
-            raise ValueError(
-                "Trial not found"
-            )
-
-        if trial["status"] in (
-            "Completed",
-            "Cancelled"
-        ):
-
-            raise ValueError(
-                "Completed or cancelled trials cannot be cancelled"
-            )
-
-        cancelled_at = utc_now()
+        if trial["status"] in ("Completed", "Cancelled"):
+            raise ValueError("Completed or cancelled trials cannot be cancelled")
 
         db.execute(
             """
             UPDATE trials
-            SET status = ?,
-                cancellation_reason = ?,
-                cancelled_at = ?
+            SET status = 'Cancelled', cancellation_reason = ?, cancelled_at = now()
             WHERE id = ?
             """,
-            (
-                "Cancelled",
-                reason,
-                cancelled_at,
-                trial_id
-            )
+            (reason, trial_id),
         )
 
         db.execute(
             """
-            INSERT INTO activity (
-                id,
-                event,
-                actor_id,
-                target_id,
-                details,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "trial_cancelled",
                 trial["youth_id"],
                 trial_id,
-                json.dumps({
-                    "trial_id": trial_id,
-                    "assignment_id": trial["assignment_id"],
-                    "youth_id": trial["youth_id"],
-                    "opportunity_id": trial["opportunity_id"],
-                    "status": "Cancelled",
-                    "reason": reason
-                }),
-                cancelled_at
-            )
+                json.dumps(
+                    {
+                        "trial_id": str(trial_id),
+                        "assignment_id": str(trial["assignment_id"]),
+                        "youth_id": str(trial["youth_id"]),
+                        "opportunity_id": str(trial["opportunity_id"]),
+                        "status": "Cancelled",
+                        "reason": reason,
+                    }
+                ),
+            ),
         )
 
-    return trial_id
+    return str(trial_id)
 
 
-def get_trial(
-    trial_id
-):
+def get_trial(trial_id):
 
     if not trial_id:
-        raise ValueError(
-            "Trial ID is required"
-        )
+        raise ValueError("Trial ID is required")
 
-    with get_connection() as db:
+    with transaction() as db:
 
         row = db.execute(
             """
             SELECT
                 t.id AS trial_id,
                 t.assignment_id,
-                t.opportunity_id,
+                oa.opportunity_id,
                 o.title AS opportunity_title,
                 o.description AS opportunity_description,
-                t.youth_id,
+                oa.youth_id,
                 y.name AS youth_name,
                 t.title,
                 t.description,
@@ -645,43 +385,33 @@ def get_trial(
                 t.cancelled_at,
                 t.cancellation_reason
             FROM trials t
-            JOIN youth y
-                ON y.id = t.youth_id
-            JOIN opportunities o
-                ON o.id = t.opportunity_id
+            JOIN opportunity_assignments oa ON oa.id = t.assignment_id
+            JOIN youth y ON y.id = oa.youth_id
+            JOIN opportunities o ON o.id = oa.opportunity_id
             WHERE t.id = ?
             """,
-            (
-                trial_id,
-            )
+            (trial_id,),
         ).fetchone()
 
     if not row:
-
-        raise ValueError(
-            "Trial not found"
-        )
+        raise ValueError("Trial not found")
 
     return dict(row)
 
 
-def list_youth_trials(
-    youth_id
-):
+def list_youth_trials(youth_id):
 
     if not youth_id:
-        raise ValueError(
-            "Youth ID is required"
-        )
+        raise ValueError("Youth ID is required")
 
-    with get_connection() as db:
+    with transaction() as db:
 
         rows = db.execute(
             """
             SELECT
                 t.id AS trial_id,
                 t.assignment_id,
-                t.opportunity_id,
+                oa.opportunity_id,
                 o.title AS opportunity_title,
                 t.title,
                 t.status,
@@ -692,40 +422,31 @@ def list_youth_trials(
                 t.completed_at,
                 t.cancelled_at
             FROM trials t
-            JOIN opportunities o
-                ON o.id = t.opportunity_id
-            WHERE t.youth_id = ?
+            JOIN opportunity_assignments oa ON oa.id = t.assignment_id
+            JOIN opportunities o ON o.id = oa.opportunity_id
+            WHERE oa.youth_id = ?
             ORDER BY t.created_at DESC
             """,
-            (
-                youth_id,
-            )
+            (youth_id,),
         ).fetchall()
 
-    return [
-        dict(row)
-        for row in rows
-    ]
+    return [dict(row) for row in rows]
 
 
-def list_assignment_trials(
-    assignment_id
-):
+def list_assignment_trials(assignment_id):
 
     if not assignment_id:
-        raise ValueError(
-            "Assignment ID is required"
-        )
+        raise ValueError("Assignment ID is required")
 
-    with get_connection() as db:
+    with transaction() as db:
 
         rows = db.execute(
             """
             SELECT
                 t.id AS trial_id,
                 t.assignment_id,
-                t.opportunity_id,
-                t.youth_id,
+                oa.opportunity_id,
+                oa.youth_id,
                 t.title,
                 t.description,
                 t.status,
@@ -733,18 +454,13 @@ def list_assignment_trials(
                 t.started_at,
                 t.submitted_at,
                 t.reviewed_at,
-                t.completed_at,
-                t.cancelled_at
+                t.completed_at
             FROM trials t
+            JOIN opportunity_assignments oa ON oa.id = t.assignment_id
             WHERE t.assignment_id = ?
             ORDER BY t.created_at DESC
             """,
-            (
-                assignment_id,
-            )
+            (assignment_id,),
         ).fetchall()
 
-    return [
-        dict(row)
-        for row in rows
-    ]
+    return [dict(row) for row in rows]

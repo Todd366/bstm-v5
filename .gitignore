@@ -16,3 +16,4 @@ bstm_pre_*.db
 bstm.db
 bstm_pre_*.db
 bstm.db.backup.*
+*.log

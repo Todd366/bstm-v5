@@ -1,13 +1,14 @@
 import json
 
 from app.core.health import system_health
-from app.db.database import get_connection
+from app.db.database import transaction
 
 from app.services.capability_service import (
     assign_capability_to_youth,
     create_capability,
     list_capabilities,
-    list_youth_capabilities
+    list_youth_capabilities,
+    verify_capability
 )
 
 from app.services.matching_service import (
@@ -40,7 +41,10 @@ from app.services.trial_service import (
 )
 
 from app.services.business_service import (
-    create_business
+    create_business,
+    get_business,
+    list_businesses as list_business_records,
+    set_audit_status
 )
 
 from app.services.opportunity_service import (
@@ -50,7 +54,8 @@ from app.services.opportunity_service import (
 )
 
 from app.services.youth_service import (
-    create_youth
+    create_youth,
+    get_youth
 )
 
 
@@ -59,9 +64,8 @@ def activate_youth(data):
     youth_id = create_youth(
         name=data["name"],
         location=data["location"],
-        passion=data["passion"],
+        passion=data.get("passion"),
         goal=data["goal"],
-        skills=data.get("skills"),
         availability=data.get("availability"),
         equipment=data.get("equipment")
     )
@@ -396,7 +400,7 @@ def list_assignment_opportunity_trials(
 
 def list_youth():
 
-    with get_connection() as db:
+    with transaction() as db:
 
         rows = db.execute(
             """
@@ -405,8 +409,9 @@ def list_youth():
                 name,
                 location,
                 passion,
-                skills,
                 goal,
+                availability,
+                equipment,
                 level,
                 capability_score,
                 learning_score,
@@ -429,7 +434,7 @@ def list_youth():
 
 def list_businesses():
 
-    with get_connection() as db:
+    with transaction() as db:
 
         rows = db.execute(
             """
@@ -482,3 +487,23 @@ def get_dashboard():
         "database": health["database"],
         "counts": health["counts"]
     }
+
+
+def get_youth_profile(youth_id):
+
+    return get_youth(youth_id)
+
+
+def verify_youth_capability(youth_capability_id, verified=True):
+
+    return verify_capability(youth_capability_id, verified)
+
+
+def get_business_profile(business_id):
+
+    return get_business(business_id)
+
+
+def update_business_audit_status(business_id, status):
+
+    return set_audit_status(business_id, status)

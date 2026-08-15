@@ -1,9 +1,17 @@
 import json
 
 from app.core.departments import DEPARTMENTS
-from app.core.ids import generate_id
-from app.core.time import utc_now
 from app.db.database import transaction
+
+
+ALLOWED_STATUSES = (
+    "Open",
+    "Matched",
+    "Assigned",
+    "InProgress",
+    "Completed",
+    "Cancelled",
+)
 
 
 def create_opportunity(
@@ -11,7 +19,7 @@ def create_opportunity(
     title,
     description=None,
     department=None,
-    budget=0
+    budget=0,
 ):
 
     if not business_id:
@@ -33,68 +41,64 @@ def create_opportunity(
 
         business = db.execute(
             "SELECT id, name FROM businesses WHERE id = ?",
-            (business_id,)
+            (business_id,),
         ).fetchone()
 
         if not business:
             raise ValueError("Business not found")
 
-        opportunity_id = generate_id("OP")
-        created_at = utc_now()
-
-        db.execute(
+        row = db.execute(
             """
             INSERT INTO opportunities (
-                id, business_id, title, description,
-                status, department, budget, created_at
+                business_id, title, description,
+                status, department, budget
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'Open', ?, ?)
+            RETURNING id
             """,
             (
-                opportunity_id,
                 business_id,
                 title.strip(),
                 description.strip() if description else None,
-                "Open",
                 department,
                 budget,
-                created_at
-            )
-        )
+            ),
+        ).fetchone()
+
+        opportunity_id = row["id"]
 
         db.execute(
             """
             UPDATE businesses
-            SET opportunities_generated = opportunities_generated + 1
+            SET opportunities_generated = opportunities_generated + 1,
+                updated_at = now()
             WHERE id = ?
             """,
-            (business_id,)
+            (business_id,),
         )
 
         db.execute(
             """
-            INSERT INTO activity (
-                id, event, actor_id, target_id, details, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                generate_id("EV"),
                 "opportunity_created",
                 business_id,
                 opportunity_id,
-                json.dumps({
-                    "business_id": business_id,
-                    "business_name": business["name"],
-                    "title": title.strip(),
-                    "department": department,
-                    "budget": budget
-                }),
-                created_at
-            )
+                json.dumps(
+                    {
+                        "business_id": business_id,
+                        "business_name": business["name"],
+                        "title": title.strip(),
+                        "department": department,
+                        "budget": budget,
+                    }
+                ),
+            ),
         )
 
-    return opportunity_id
+    return str(opportunity_id)
 
 
 def list_opportunities():
@@ -116,9 +120,7 @@ def list_opportunities():
     return [dict(row) for row in rows]
 
 
-def get_opportunity(
-    opportunity_id
-):
+def get_opportunity(opportunity_id):
 
     if not opportunity_id:
         raise ValueError("Opportunity ID is required")
@@ -135,10 +137,37 @@ def get_opportunity(
             LEFT JOIN businesses b ON b.id = o.business_id
             WHERE o.id = ?
             """,
-            (opportunity_id,)
+            (opportunity_id,),
         ).fetchone()
 
     if not row:
         raise ValueError("Opportunity not found")
 
     return dict(row)
+
+
+def set_opportunity_status(opportunity_id, status):
+    """Not in the original service — added because assignment/trial
+    workflows need to move an opportunity through its lifecycle
+    (Open -> Matched -> Assigned -> InProgress -> Completed/Cancelled),
+    and the status column has a CHECK constraint enforcing these values."""
+
+    if status not in ALLOWED_STATUSES:
+        raise ValueError(f"Invalid opportunity status: {status}")
+
+    with transaction() as db:
+
+        row = db.execute(
+            """
+            UPDATE opportunities
+            SET status = ?, updated_at = now()
+            WHERE id = ?
+            RETURNING id
+            """,
+            (status, opportunity_id),
+        ).fetchone()
+
+        if not row:
+            raise ValueError("Opportunity not found")
+
+    return get_opportunity(opportunity_id)

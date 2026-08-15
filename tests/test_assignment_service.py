@@ -1,10 +1,6 @@
-import os
-import tempfile
+from tests.helpers import _is_valid_uuid
 
 import pytest
-
-import app.core.config as config
-import app.db.database as database
 
 from app.services.assignment_service import (
     accept_assignment,
@@ -39,44 +35,6 @@ from app.services.youth_service import (
 )
 
 
-@pytest.fixture
-def test_database():
-
-    original_path = config.DATABASE_PATH
-
-    temp = tempfile.NamedTemporaryFile(
-        delete=False
-    )
-
-    temp.close()
-
-    config.DATABASE_PATH = temp.name
-
-    database.DATABASE_PATH = temp.name
-
-    database.initialize_database()
-
-    database.ensure_slice2_schema()
-
-    database.ensure_slice3a_schema()
-
-    try:
-
-        yield
-
-    finally:
-
-        config.DATABASE_PATH = original_path
-
-        database.DATABASE_PATH = original_path
-
-        if os.path.exists(
-            temp.name
-        ):
-
-            os.unlink(
-                temp.name
-            )
 
 
 def create_test_entities():
@@ -86,7 +44,6 @@ def create_test_entities():
         location="Gaborone",
         passion="Technology",
         goal="Work on technology projects",
-        skills="Web Development"
     )
 
     capability_id = create_capability(
@@ -144,8 +101,8 @@ def test_create_assignment(
         match_id=match_id
     )
 
-    assert assignment_id.startswith(
-        "ASSIGN-"
+    assert _is_valid_uuid(
+        assignment_id
     )
 
     assignment = get_assignment(
