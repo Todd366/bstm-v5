@@ -2,6 +2,12 @@
 name = "bstm-v5"
 version = "5.0.0"
 requires-python = ">=3.9"
+dependencies = [
+    "fastapi<0.100.0",
+    "pydantic<2.0.0",
+    "psycopg2-binary",
+    "python-multipart",
+]
 
 [tool.vercel]
 entrypoint = "app.main:app"
