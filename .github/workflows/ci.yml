@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import sanity check
+        # Catches the class of bug we hit deploying to Vercel: a module
+        # that fails to import at all (missing dependency, syntax error,
+        # broken import chain). No env vars set on purpose — app.main
+        # must be importable without BSTM_DATABASE_URL/BSTM_API_KEY;
+        # both are only checked at request time, not import time.
+        run: python -c "import app.main; print('app.main imports cleanly')"
+
+      - name: Run tests
+        # BSTM_DATABASE_URL is deliberately NOT set here. This repo has
+        # no isolated test database available (both of the account's two
+        # Supabase projects are already in active production use by
+        # other apps — see migrations/ comments), and the test fixture
+        # in tests/conftest.py truncates all tables. Running it against
+        # a real database on every push would destroy production data.
+        # Every test requiring a live DB uses pytest.skip() when the URL
+        # isn't set (by design, in conftest.py and test_core.py), so
+        # this runs only genuinely DB-independent tests — currently the
+        # progression engine's pure logic. Full integration tests still
+        # need to be run manually against Supabase (from Termux) until
+        # a dedicated test database exists.
+        run: python -m pytest -v
