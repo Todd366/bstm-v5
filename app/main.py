@@ -9,12 +9,18 @@ All routes are thin wrappers around app.api.service — the actual business
 logic lives in app.services.*, not here.
 """
 
+import json
+import logging
 import secrets
+import time
+import traceback
+import uuid
 
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -66,6 +72,36 @@ app = FastAPI(
     description="Human Capital + Opportunity + Business Activation OS",
 )
 
+
+class _JSONLogFormatter(logging.Formatter):
+    """Every log line comes out as one JSON object — Vercel captures
+    stdout/stderr into its runtime logs regardless of format, but plain
+    text isn't filterable or alertable. JSON is, including by anyone
+    who later wires this up to a real log aggregator."""
+
+    def format(self, record):
+        payload = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        for key in ("request_id", "path", "method", "status_code", "duration_ms"):
+            if hasattr(record, key):
+                payload[key] = getattr(record, key)
+        if record.exc_info:
+            payload["exception"] = "".join(
+                traceback.format_exception(*record.exc_info)
+            )
+        return json.dumps(payload)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_JSONLogFormatter())
+logging.getLogger().handlers = [_handler]
+logging.getLogger().setLevel(logging.INFO)
+logger = logging.getLogger("bstm")
+
+
 # CORS is left open for now (no confirmed frontend origin to lock it to
 # yet) — but that's no longer the real access control. The API key
 # middleware below is. CORS only restricts browser-originated requests
@@ -82,38 +118,115 @@ app.add_middleware(
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 
-@app.middleware("http")
-async def require_api_key(request: Request, call_next):
-    """Single centralized auth check, rather than a dependency added to
-    every route individually — harder to accidentally forget on a new
-    endpoint later.
-
-    There is no per-user login system yet, so this is a shared-secret
-    stopgap appropriate for the system's current maturity, not a
-    long-term replacement for real auth once BSTM has user accounts.
+class AuthAndLoggingMiddleware:
+    """Raw ASGI middleware, not the `@app.middleware("http")` /
+    BaseHTTPMiddleware sugar — that pattern has a known limitation in
+    the Starlette version bundled with our pinned fastapi<0.100: header
+    mutations made on the response object *after* `call_next()` returns
+    don't reliably reach the actual wire response (confirmed directly:
+    X-Request-ID was silently absent from real responses). Operating at
+    the raw ASGI level and intercepting the `http.response.start`
+    message directly is correct regardless of that limitation.
     """
 
-    if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
-        return await call_next(request)
+    def __init__(self, app):
+        self.app = app
 
-    if not API_KEY:
-        # Deliberately fails closed: an unset key is a misconfiguration,
-        # not "no auth needed". Silently running open in production is
-        # worse than a loud, obvious 500 here.
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Server misconfigured: BSTM_API_KEY is not set."},
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())
+        scope["state"] = {"request_id": request_id}
+
+        method = scope["method"]
+        path = scope["path"]
+        headers = Headers(scope=scope)
+
+        requires_auth = method != "OPTIONS" and path not in _PUBLIC_PATHS
+
+        if requires_auth:
+            if not API_KEY:
+                # Deliberately fails closed: an unset key is a
+                # misconfiguration, not "no auth needed".
+                response = JSONResponse(
+                    status_code=500,
+                    content={"detail": "Server misconfigured: BSTM_API_KEY is not set."},
+                )
+                response.headers["X-Request-ID"] = request_id
+                await response(scope, receive, send)
+                return
+
+            provided = headers.get("x-api-key", "")
+
+            if not secrets.compare_digest(provided, API_KEY):
+                response = JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid API key."},
+                )
+                response.headers["X-Request-ID"] = request_id
+                await response(scope, receive, send)
+                return
+
+        start = time.monotonic()
+        status_holder = {}
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                message["headers"].append(
+                    (b"x-request-id", request_id.encode("utf-8"))
+                )
+                status_holder["status_code"] = message["status"]
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+        duration_ms = round((time.monotonic() - start) * 1000, 2)
+        logger.info(
+            "request completed",
+            extra={
+                "request_id": request_id,
+                "path": path,
+                "method": method,
+                "status_code": status_holder.get("status_code"),
+                "duration_ms": duration_ms,
+            },
         )
 
-    provided = request.headers.get("x-api-key", "")
 
-    if not secrets.compare_digest(provided, API_KEY):
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Missing or invalid API key."},
-        )
+app.add_middleware(AuthAndLoggingMiddleware)
 
-    return await call_next(request)
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catches anything _service_call's ValueError handling doesn't —
+    real bugs, database errors (deadlocks, connection failures), etc.
+    Without this, an uncaught exception just becomes Vercel's generic
+    'FUNCTION_INVOCATION_FAILED' page: no structured log, and in some
+    configurations the raw traceback leaks straight to the client.
+    Logs the full traceback server-side, returns a clean, safe message
+    with a request_id the person can report back for lookup."""
+
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    logger.error(
+        "unhandled exception",
+        exc_info=exc,
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "method": request.method,
+        },
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error.",
+            "request_id": request_id,
+        },
+    )
 
 
 def _service_call(fn, *args, **kwargs):
