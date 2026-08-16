@@ -22,10 +22,20 @@ DATABASE_PATH = os.getenv(
 )
 
 # Postgres (Supabase) connection string.
-# On Vercel (serverless), use the Supabase *pooler* connection string
-# (port 6543, pgbouncer transaction mode) — not the direct DB connection —
-# because serverless functions open/close connections per-request and
-# the direct connection limit will exhaust fast.
+# Use the Supabase *session pooler* connection string (port 5432 on the
+# pooler hostname, not the direct DB host) — the transaction pooler
+# (port 6543) does not reliably preserve `SET search_path` across
+# separate transactions on the same connection, which this app relies
+# on (see app/db/database.py get_connection()). Verified against real
+# production failures, not just documentation.
 DATABASE_URL = os.getenv("BSTM_DATABASE_URL")
 
 DB_SCHEMA = os.getenv("BSTM_DB_SCHEMA", "activation")
+
+# Shared-secret API key required on every request except /, /health,
+# and the auto-generated docs routes. There is no per-user login system
+# yet — this is a stopgap appropriate for the system's current maturity,
+# not a long-term replacement for real auth once BSTM has user accounts.
+# Deliberately has NO default: an unset key means auth is misconfigured,
+# not "open" — see require_api_key() in app/main.py.
+API_KEY = os.getenv("BSTM_API_KEY")

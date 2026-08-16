@@ -9,13 +9,16 @@ All routes are thin wrappers around app.api.service — the actual business
 logic lives in app.services.*, not here.
 """
 
+import secrets
+
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.core.config import APP_NAME, APP_VERSION, ENVIRONMENT
+from app.core.config import API_KEY, APP_NAME, APP_VERSION, ENVIRONMENT
 
 from app.api.service import (
     accept_opportunity_assignment,
@@ -63,15 +66,54 @@ app = FastAPI(
     description="Human Capital + Opportunity + Business Activation OS",
 )
 
-# NOTE: wide open for now so the frontend and any client can reach the API
-# during early development. Lock this down to the real frontend origin(s)
-# before this goes properly live.
+# CORS is left open for now (no confirmed frontend origin to lock it to
+# yet) — but that's no longer the real access control. The API key
+# middleware below is. CORS only restricts browser-originated requests
+# anyway; it was never a substitute for real authentication.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Paths reachable with no API key: health checks and monitoring need to
+# work without a secret, and the auto-generated docs are read-only.
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """Single centralized auth check, rather than a dependency added to
+    every route individually — harder to accidentally forget on a new
+    endpoint later.
+
+    There is no per-user login system yet, so this is a shared-secret
+    stopgap appropriate for the system's current maturity, not a
+    long-term replacement for real auth once BSTM has user accounts.
+    """
+
+    if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+
+    if not API_KEY:
+        # Deliberately fails closed: an unset key is a misconfiguration,
+        # not "no auth needed". Silently running open in production is
+        # worse than a loud, obvious 500 here.
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Server misconfigured: BSTM_API_KEY is not set."},
+        )
+
+    provided = request.headers.get("x-api-key", "")
+
+    if not secrets.compare_digest(provided, API_KEY):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid API key."},
+        )
+
+    return await call_next(request)
 
 
 def _service_call(fn, *args, **kwargs):
