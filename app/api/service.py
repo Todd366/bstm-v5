@@ -73,7 +73,8 @@ def activate_youth(data):
         passion=data.get("passion"),
         goal=data["goal"],
         availability=data.get("availability"),
-        equipment=data.get("equipment")
+        equipment=data.get("equipment"),
+        intake=data.get("intake")
     )
 
     return {

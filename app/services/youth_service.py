@@ -1,6 +1,7 @@
 import json
 
 import psycopg2
+import psycopg2.extras
 
 from app.db.database import transaction
 
@@ -12,6 +13,7 @@ def create_youth(
     passion=None,
     availability=None,
     equipment=None,
+    intake=None,
 ):
     """Creates a youth profile. Returns the new youth's UUID (as str).
 
@@ -19,6 +21,12 @@ def create_youth(
     normalized into activation.youth_capabilities (see capability_service),
     not stored as free text on the youth row. This is a deliberate
     departure from the legacy SQLite schema.
+
+    `intake` is an optional free-form dict holding the frontend's full
+    discovery-questionnaire response (life position, education,
+    financial reality, obstacles, aspiration, etc.) — richer than this
+    function's own named fields support. Stored as-is in the JSONB
+    `intake` column; nothing in this function inspects its contents.
     """
 
     try:
@@ -39,9 +47,9 @@ def create_youth(
             row = db.execute(
                 """
                 INSERT INTO youth (
-                    name, location, passion, goal, availability, equipment
+                    name, location, passion, goal, availability, equipment, intake
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 (
@@ -51,6 +59,7 @@ def create_youth(
                     goal.strip(),
                     availability,
                     equipment,
+                    psycopg2.extras.Json(intake) if intake else None,
                 ),
             ).fetchone()
 

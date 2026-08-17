@@ -120,6 +120,22 @@ app.add_middleware(
 # work without a secret, and the auto-generated docs are read-only.
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
+# (method, path) pairs that are public BY DESIGN, not oversight: this is
+# the one write action the real public-facing frontend (index.html /
+# script.js) needs to perform before a youth has any credentials at
+# all — self-registration. Embedding the admin X-API-Key in
+# browser-shipped JS would leak it to anyone who views source, which
+# would defeat the rest of this auth work the moment the frontend went
+# live. Everything else (business data, opportunity management, trial
+# review, capability verification) stays behind the key.
+#
+# KNOWN GAP: this endpoint has no rate limiting yet. A stateless
+# Vercel deployment can't do in-memory rate limiting reliably (no
+# shared state between invocations) — a real fix needs an external
+# store (e.g. Redis, or a Postgres-backed counter). Don't treat this
+# as launch-ready for real public traffic until that's added.
+_PUBLIC_WRITES = {("POST", "/youth")}
+
 
 class AuthAndLoggingMiddleware:
     """Raw ASGI middleware, not the `@app.middleware("http")` /
@@ -147,7 +163,11 @@ class AuthAndLoggingMiddleware:
         path = scope["path"]
         headers = Headers(scope=scope)
 
-        requires_auth = method != "OPTIONS" and path not in _PUBLIC_PATHS
+        requires_auth = (
+            method != "OPTIONS"
+            and path not in _PUBLIC_PATHS
+            and (method, path) not in _PUBLIC_WRITES
+        )
 
         if requires_auth:
             if not API_KEY:
@@ -254,6 +274,7 @@ class YouthCreate(BaseModel):
     passion: Optional[str] = None
     availability: Optional[str] = None
     equipment: Optional[str] = None
+    intake: Optional[dict] = None
 
 
 class BusinessCreate(BaseModel):
