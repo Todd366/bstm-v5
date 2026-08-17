@@ -58,6 +58,12 @@ from app.services.youth_service import (
     get_youth
 )
 
+from app.services.evidence_service import (
+    list_trial_evidence,
+    list_youth_evidence,
+    submit_evidence
+)
+
 
 def activate_youth(data):
 
@@ -507,3 +513,34 @@ def get_business_profile(business_id):
 def update_business_audit_status(business_id, status):
 
     return set_audit_status(business_id, status)
+
+
+def submit_youth_evidence(data):
+
+    evidence_id = submit_evidence(
+        youth_id=data["youth_id"],
+        kind=data["kind"],
+        trial_id=data.get("trial_id"),
+        capability_id=data.get("capability_id"),
+        url=data.get("url"),
+        notes=data.get("notes")
+    )
+
+    return {
+        "status": "submitted",
+        "id": evidence_id
+    }
+
+
+def list_youth_evidence_records(youth_id):
+
+    return list_youth_evidence(
+        youth_id
+    )
+
+
+def list_trial_evidence_records(trial_id):
+
+    return list_trial_evidence(
+        trial_id
+    )

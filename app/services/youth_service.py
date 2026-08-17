@@ -77,6 +77,9 @@ def create_youth(
 
 def get_youth(youth_id):
 
+    if not youth_id:
+        raise ValueError("Youth ID is required")
+
     with transaction() as db:
 
         row = db.execute(
@@ -84,7 +87,10 @@ def get_youth(youth_id):
             (youth_id,),
         ).fetchone()
 
-    return dict(row) if row else None
+    if not row:
+        raise ValueError("Youth not found")
+
+    return dict(row)
 
 
 def list_youth(limit=50, offset=0):

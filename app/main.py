@@ -57,6 +57,9 @@ from app.api.service import (
     list_youth_opportunity_assignments,
     list_youth_opportunity_matches,
     list_youth_opportunity_trials,
+    list_youth_evidence_records,
+    list_trial_evidence_records,
+    submit_youth_evidence,
     match_youth_opportunity,
     review_opportunity_trial,
     start_opportunity_trial,
@@ -286,6 +289,15 @@ class CapabilityAssign(BaseModel):
 
 class CapabilityVerify(BaseModel):
     verified: bool = True
+
+
+class EvidenceSubmit(BaseModel):
+    youth_id: str
+    kind: str
+    trial_id: Optional[str] = None
+    capability_id: Optional[str] = None
+    url: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class MatchCreate(BaseModel):
@@ -525,3 +537,20 @@ def complete_trial_route(trial_id: str, payload: TrialReview):
 @app.post("/trials/{trial_id}/cancel")
 def cancel_trial_route(trial_id: str, payload: TrialCancel):
     return _service_call(cancel_opportunity_trial, trial_id, payload.reason)
+
+
+# ---------- evidence ----------
+
+@app.post("/evidence", status_code=201)
+def submit_evidence_route(payload: EvidenceSubmit):
+    return _service_call(submit_youth_evidence, payload.dict())
+
+
+@app.get("/youth/{youth_id}/evidence")
+def list_youth_evidence_route(youth_id: str):
+    return _service_call(list_youth_evidence_records, youth_id)
+
+
+@app.get("/trials/{trial_id}/evidence")
+def list_trial_evidence_route(trial_id: str):
+    return _service_call(list_trial_evidence_records, trial_id)

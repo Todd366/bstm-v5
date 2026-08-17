@@ -69,6 +69,9 @@ def create_business(
 
 def get_business(business_id):
 
+    if not business_id:
+        raise ValueError("Business ID is required")
+
     with transaction() as db:
 
         row = db.execute(
@@ -76,7 +79,10 @@ def get_business(business_id):
             (business_id,),
         ).fetchone()
 
-    return dict(row) if row else None
+    if not row:
+        raise ValueError("Business not found")
+
+    return dict(row)
 
 
 def list_businesses(limit=50, offset=0):
