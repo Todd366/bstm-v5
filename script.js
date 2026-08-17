@@ -1,9 +1,73 @@
 /* ============================================================
    BSTM THRESHOLD — onboarding logic
-   No localStorage/backend calls are wired yet — everything
-   lives in `state` for this preview. Where a real BSTM V5 API
-   call belongs, it's marked with // API: ...
+
+   Youth self-registration (POST /youth) is wired to the real
+   BSTM V5 API — see registerYouth() below. The business-audit
+   flow and trial/field-audit submission are still local-only;
+   those backend endpoints require an existing business/opportunity
+   context that this UI doesn't collect yet — still marked with
+   // API: ... where they belong.
    ============================================================ */
+
+// POST /youth is deliberately public (no key) on the backend — the
+// admin API key must never be embedded in code shipped to a browser,
+// since anyone can view-source it. Every other BSTM V5 route requires
+// that key and is NOT safe to call directly from this frontend.
+const API_BASE = "https://bstm-v5.vercel.app";
+
+// Maps the wizard's raw field names to what POST /youth actually
+// accepts. Fields with no direct match (age, position, education,
+// skillLevel, income, capital, challenges) go into `intake` as a full
+// raw snapshot, alongside everything else, rather than being dropped.
+function mapYouthPayload(y) {
+  return {
+    name: y.name,
+    location: y.location,
+    goal: y.aspiration,
+    passion: (y.interests || []).join(", ") || null,
+    availability: y.availability || null,
+    equipment: (y.resources || []).join(", ") || null,
+    intake: y,
+  };
+}
+
+async function registerYouth(y) {
+  const response = await fetch(`${API_BASE}/youth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(mapYouthPayload(y)),
+  });
+
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(body.detail || `Registration failed (${response.status})`);
+  }
+
+  return body.id;
+}
+
+async function createBusinessRecord(b) {
+  const response = await fetch(`${API_BASE}/businesses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: b.name,
+      owner: b.owner,
+      sector: b.sector,
+      location: b.location,
+      main_problem: b.problem,
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(body.detail || `Business registration failed (${response.status})`);
+  }
+
+  return body.id;
+}
 
 const DEPARTMENTS = [
   { id: "ai-ml", name: "AI & Machine Learning", cat: "Technology", tags: ["technology", "research"], resource: "high", entry: "Telegram AI bot builds" },
@@ -372,15 +436,26 @@ function renderYouth() {
     renderYouth();
   });
 
-  document.getElementById("wiz-next").addEventListener("click", () => {
+  document.getElementById("wiz-next").addEventListener("click", async () => {
     step.read(state.youth);
     if (!step.valid(state.youth)) {
       flashInvalid();
       return;
     }
     if (state.youthStep === total - 1) {
-      // API: POST state.youth to /activate_youth once BSTM V5 is live
-      go("kgotla");
+      const btn = document.getElementById("wiz-next");
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Submitting...";
+
+      try {
+        state.youth.id = await registerYouth(state.youth);
+        go("kgotla");
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        showSubmissionError(err.message);
+      }
       return;
     }
     state.youthStep += 1;
@@ -392,6 +467,23 @@ function flashInvalid() {
   const nav = document.getElementById("wiz-next");
   nav.style.borderColor = "var(--warn)";
   setTimeout(() => (nav.style.borderColor = ""), 500);
+}
+
+function showSubmissionError(message) {
+  const nav = document.querySelector(".wizard-nav");
+  if (!nav) return;
+
+  let banner = document.getElementById("submission-error");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "submission-error";
+    banner.style.color = "var(--warn)";
+    banner.style.fontSize = "0.85em";
+    banner.style.marginTop = "8px";
+    banner.style.textAlign = "center";
+    nav.insertAdjacentElement("afterend", banner);
+  }
+  banner.textContent = message;
 }
 
 /* ---------------- render: kgotla ---------------- */
@@ -445,7 +537,13 @@ function renderKgotla() {
   `;
 
   document.getElementById("enter-ecosystem").addEventListener("click", () => {
-    // API: this is where activate_youth + first opportunity match would fire
+    // Registration already happened at the end of the wizard (see
+    // registerYouth() above) — this button is just navigation.
+    // Auto-matching this youth to a real opportunity here would need
+    // real opportunities to exist for their matched department, which
+    // isn't guaranteed at this point in the flow. Revisit once there's
+    // a "browse open opportunities for me" screen to send them to
+    // instead of straight back to the doors.
     go("doors");
   });
 }
@@ -494,14 +592,27 @@ function renderBusinessIntake() {
     </div>
   `;
   document.getElementById("biz-back").addEventListener("click", () => go("doors"));
-  document.getElementById("biz-next").addEventListener("click", () => {
+  document.getElementById("biz-next").addEventListener("click", async () => {
     state.business.name = document.getElementById("b-name").value.trim();
     state.business.owner = document.getElementById("b-owner").value.trim();
     state.business.sector = document.getElementById("b-sector").value.trim();
     state.business.location = document.getElementById("b-location").value.trim();
     state.business.problem = document.getElementById("b-problem").value.trim();
     if (!state.business.name || !state.business.problem) { flashInvalidNav("biz-next"); return; }
-    go("business-loading");
+
+    const btn = document.getElementById("biz-next");
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Submitting...";
+
+    try {
+      state.business.id = await createBusinessRecord(state.business);
+      go("business-loading");
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      showSubmissionError(err.message);
+    }
   });
 }
 
@@ -544,8 +655,12 @@ function renderBusinessResult() {
     </div>
   `;
   document.getElementById("biz-continue").addEventListener("click", () => {
-    // API: this is where each problem becomes a create_opportunity call,
-    // tagged with department, ready for youth matching
+    // Deliberately NOT wired to create_opportunity: mockDiagnosis()
+    // below is naive client-side keyword matching, not a real
+    // diagnosis. Auto-creating real opportunity records from it would
+    // put junk data into the same table that youth-matching logic
+    // relies on being genuine. Wire this once a real Business Health
+    // Audit methodology produces the findings instead.
     go("doors");
   });
 }

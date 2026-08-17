@@ -120,21 +120,23 @@ app.add_middleware(
 # work without a secret, and the auto-generated docs are read-only.
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
-# (method, path) pairs that are public BY DESIGN, not oversight: this is
-# the one write action the real public-facing frontend (index.html /
-# script.js) needs to perform before a youth has any credentials at
-# all — self-registration. Embedding the admin X-API-Key in
-# browser-shipped JS would leak it to anyone who views source, which
-# would defeat the rest of this auth work the moment the frontend went
-# live. Everything else (business data, opportunity management, trial
-# review, capability verification) stays behind the key.
+# (method, path) pairs that are public BY DESIGN, not oversight: these
+# are the two self-service intake actions the real public-facing
+# frontend (index.html / script.js "Door One" and "Door Two") needs to
+# perform before the person filling them out has any credentials at
+# all — youth self-registration and business self-registration.
+# Embedding the admin X-API-Key in browser-shipped JS would leak it to
+# anyone who views source, which would defeat the rest of this auth
+# work the moment the frontend went live. Everything else (opportunity
+# management, trial review, capability verification, and anything
+# beyond the initial intake) stays behind the key.
 #
-# KNOWN GAP: this endpoint has no rate limiting yet. A stateless
+# KNOWN GAP: neither endpoint has rate limiting yet. A stateless
 # Vercel deployment can't do in-memory rate limiting reliably (no
 # shared state between invocations) — a real fix needs an external
-# store (e.g. Redis, or a Postgres-backed counter). Don't treat this
+# store (e.g. Redis, or a Postgres-backed counter). Don't treat either
 # as launch-ready for real public traffic until that's added.
-_PUBLIC_WRITES = {("POST", "/youth")}
+_PUBLIC_WRITES = {("POST", "/youth"), ("POST", "/businesses")}
 
 
 class AuthAndLoggingMiddleware:
