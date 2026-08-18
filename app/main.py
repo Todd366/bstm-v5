@@ -9,6 +9,7 @@ All routes are thin wrappers around app.api.service — the actual business
 logic lives in app.services.*, not here.
 """
 
+import asyncio
 import json
 import logging
 import secrets
@@ -25,6 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.core.config import API_KEY, APP_NAME, APP_VERSION, ENVIRONMENT
+from app.services.rate_limit_service import check_rate_limit
 
 from app.api.service import (
     accept_opportunity_assignment,
@@ -139,6 +141,21 @@ _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 _PUBLIC_WRITES = {("POST", "/youth"), ("POST", "/businesses")}
 
 
+def _get_client_ip(scope, headers):
+    """Vercel (and most reverse proxies) put the real client IP in
+    X-Forwarded-For as the first entry in a comma-separated chain —
+    scope["client"] behind a proxy is the proxy's own address, not the
+    person's. Falls back to scope["client"] for local/direct runs
+    (e.g. uvicorn in Termux with no proxy in front)."""
+
+    forwarded = headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+
+    client = scope.get("client")
+    return client[0] if client else None
+
+
 class AuthAndLoggingMiddleware:
     """Raw ASGI middleware, not the `@app.middleware("http")` /
     BaseHTTPMiddleware sugar — that pattern has a known limitation in
@@ -189,6 +206,27 @@ class AuthAndLoggingMiddleware:
                 response = JSONResponse(
                     status_code=401,
                     content={"detail": "Missing or invalid API key."},
+                )
+                response.headers["X-Request-ID"] = request_id
+                await response(scope, receive, send)
+                return
+
+        if (method, path) in _PUBLIC_WRITES:
+            client_ip = _get_client_ip(scope, headers)
+
+            try:
+                # Runs a blocking DB call, so it goes through a thread
+                # rather than directly in this async function — the
+                # same reasoning FastAPI itself uses for our sync route
+                # handlers, applied manually here since this is raw
+                # ASGI middleware rather than a route.
+                await asyncio.to_thread(
+                    check_rate_limit, client_ip, path
+                )
+            except ValueError as exc:
+                response = JSONResponse(
+                    status_code=429,
+                    content={"detail": str(exc)},
                 )
                 response.headers["X-Request-ID"] = request_id
                 await response(scope, receive, send)
