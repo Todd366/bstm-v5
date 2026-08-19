@@ -54,8 +54,13 @@ from app.services.opportunity_service import (
 )
 
 from app.services.youth_service import (
+    authenticate_youth,
     create_youth,
     get_youth
+)
+
+from app.services.auth_service import (
+    create_access_token
 )
 
 from app.services.evidence_service import (
@@ -72,6 +77,8 @@ def activate_youth(data):
         location=data["location"],
         passion=data.get("passion"),
         goal=data["goal"],
+        email=data["email"],
+        password=data["password"],
         availability=data.get("availability"),
         equipment=data.get("equipment"),
         intake=data.get("intake")
@@ -80,6 +87,22 @@ def activate_youth(data):
     return {
         "status": "created",
         "id": youth_id
+    }
+
+
+def login_youth(data):
+
+    youth_id = authenticate_youth(
+        email=data["email"],
+        password=data["password"]
+    )
+
+    token = create_access_token(youth_id)
+
+    return {
+        "status": "authenticated",
+        "access_token": token,
+        "token_type": "bearer"
     }
 
 

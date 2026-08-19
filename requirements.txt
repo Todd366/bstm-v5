@@ -7,3 +7,4 @@ python-multipart
 pytest
 httpx
 psycopg2-binary
+PyJWT<3.0.0

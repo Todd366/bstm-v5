@@ -27,11 +27,13 @@ from pydantic import BaseModel
 
 from app.core.config import API_KEY, APP_NAME, APP_VERSION, ENVIRONMENT
 from app.services.rate_limit_service import check_rate_limit
+from app.services.auth_service import decode_access_token
 
 from app.api.service import (
     accept_opportunity_assignment,
     activate_business,
     activate_youth,
+    login_youth,
     assign_opportunity,
     assign_youth_capability,
     cancel_opportunity_assignment,
@@ -123,22 +125,29 @@ app.add_middleware(
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 # (method, path) pairs that are public BY DESIGN, not oversight: these
-# are the two self-service intake actions the real public-facing
+# are the self-service intake/auth actions the real public-facing
 # frontend (index.html / script.js "Door One" and "Door Two") needs to
 # perform before the person filling them out has any credentials at
-# all — youth self-registration and business self-registration.
-# Embedding the admin X-API-Key in browser-shipped JS would leak it to
-# anyone who views source, which would defeat the rest of this auth
-# work the moment the frontend went live. Everything else (opportunity
-# management, trial review, capability verification, and anything
-# beyond the initial intake) stays behind the key.
-#
-# KNOWN GAP: neither endpoint has rate limiting yet. A stateless
-# Vercel deployment can't do in-memory rate limiting reliably (no
-# shared state between invocations) — a real fix needs an external
-# store (e.g. Redis, or a Postgres-backed counter). Don't treat either
-# as launch-ready for real public traffic until that's added.
-_PUBLIC_WRITES = {("POST", "/youth"), ("POST", "/businesses")}
+# all — youth self-registration, youth login, and business
+# self-registration. Embedding the admin X-API-Key in browser-shipped
+# JS would leak it to anyone who views source, which would defeat the
+# rest of this auth work the moment the frontend went live. Everything
+# else (opportunity management, trial review, capability verification,
+# and anything beyond the initial intake) stays behind the key.
+# All three are rate-limited (see check_rate_limit below) — login gets
+# a higher ceiling than registration since a genuine person may
+# legitimately mistype a password a few times, but it's still capped
+# to make brute-forcing a real password impractically slow.
+_PUBLIC_WRITES = {("POST", "/youth"), ("POST", "/businesses"), ("POST", "/youth/login")}
+
+_LOGIN_PATH = ("POST", "/youth/login")
+
+# Paths that authenticate via a youth's own JWT (from POST /youth/login)
+# rather than the admin X-API-Key — this is a genuinely separate tier:
+# a youth's token proves who THEY are, not that they're allowed to
+# perform admin operations, and vice versa the admin key was never
+# meant to represent a specific youth's identity.
+_YOUTH_AUTH_PATHS = {("GET", "/me")}
 
 
 def _get_client_ip(scope, headers):
@@ -186,6 +195,7 @@ class AuthAndLoggingMiddleware:
             method != "OPTIONS"
             and path not in _PUBLIC_PATHS
             and (method, path) not in _PUBLIC_WRITES
+            and (method, path) not in _YOUTH_AUTH_PATHS
         )
 
         if requires_auth:
@@ -211,8 +221,40 @@ class AuthAndLoggingMiddleware:
                 await response(scope, receive, send)
                 return
 
+        if (method, path) in _YOUTH_AUTH_PATHS:
+            auth_header = headers.get("authorization", "")
+            token = auth_header[7:] if auth_header.lower().startswith("bearer ") else None
+
+            try:
+                youth_id = decode_access_token(token) if token else None
+            except RuntimeError:
+                # Same reasoning as the API_KEY check above: an unset
+                # JWT_SECRET is a misconfiguration, not "no auth
+                # needed" — fail loudly and cleanly rather than crash
+                # raw outside Starlette's own exception handling
+                # (this middleware is the outermost ASGI layer).
+                response = JSONResponse(
+                    status_code=500,
+                    content={"detail": "Server misconfigured: BSTM_JWT_SECRET is not set."},
+                )
+                response.headers["X-Request-ID"] = request_id
+                await response(scope, receive, send)
+                return
+
+            if not youth_id:
+                response = JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid access token."},
+                )
+                response.headers["X-Request-ID"] = request_id
+                await response(scope, receive, send)
+                return
+
+            scope["state"]["youth_id"] = youth_id
+
         if (method, path) in _PUBLIC_WRITES:
             client_ip = _get_client_ip(scope, headers)
+            rate_limit = 10 if (method, path) == _LOGIN_PATH else 5
 
             try:
                 # Runs a blocking DB call, so it goes through a thread
@@ -221,7 +263,7 @@ class AuthAndLoggingMiddleware:
                 # handlers, applied manually here since this is raw
                 # ASGI middleware rather than a route.
                 await asyncio.to_thread(
-                    check_rate_limit, client_ip, path
+                    check_rate_limit, client_ip, path, rate_limit
                 )
             except ValueError as exc:
                 response = JSONResponse(
@@ -311,10 +353,17 @@ class YouthCreate(BaseModel):
     name: str
     location: str
     goal: str
+    email: str
+    password: str
     passion: Optional[str] = None
     availability: Optional[str] = None
     equipment: Optional[str] = None
     intake: Optional[dict] = None
+
+
+class YouthLogin(BaseModel):
+    email: str
+    password: str
 
 
 class BusinessCreate(BaseModel):
@@ -414,6 +463,16 @@ def root():
 @app.post("/youth", status_code=201)
 def create_youth_route(payload: YouthCreate):
     return _service_call(activate_youth, payload.dict())
+
+
+@app.post("/youth/login")
+def login_youth_route(payload: YouthLogin):
+    return _service_call(login_youth, payload.dict())
+
+
+@app.get("/me")
+def get_my_profile_route(request: Request):
+    return _service_call(get_youth_profile, request.state.youth_id)
 
 
 @app.get("/youth")

@@ -33,9 +33,17 @@ DATABASE_URL = os.getenv("BSTM_DATABASE_URL")
 DB_SCHEMA = os.getenv("BSTM_DB_SCHEMA", "activation")
 
 # Shared-secret API key required on every request except /, /health,
-# and the auto-generated docs routes. There is no per-user login system
-# yet — this is a stopgap appropriate for the system's current maturity,
-# not a long-term replacement for real auth once BSTM has user accounts.
+# the auto-generated docs routes, and youth self-registration/login
+# (see AuthAndLoggingMiddleware and _PUBLIC_WRITES in app/main.py).
+# This remains the right mechanism for admin/internal operations
+# (business management, opportunity assignment, trial review) — real
+# per-youth identity now goes through JWT_SECRET below instead.
 # Deliberately has NO default: an unset key means auth is misconfigured,
-# not "open" — see require_api_key() in app/main.py.
+# not "open".
 API_KEY = os.getenv("BSTM_API_KEY")
+
+# Signs/verifies youth login tokens (see app/services/auth_service.py).
+# Deliberately no default, same reasoning as API_KEY — an unset secret
+# should fail loudly, not silently issue tokens signed with a value
+# anyone could guess.
+JWT_SECRET = os.getenv("BSTM_JWT_SECRET")

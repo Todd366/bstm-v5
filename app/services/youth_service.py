@@ -4,18 +4,28 @@ import psycopg2
 import psycopg2.extras
 
 from app.db.database import transaction
+from app.services.auth_service import hash_password, verify_password
 
 
 def create_youth(
     name,
     location,
     goal,
+    email,
+    password,
     passion=None,
     availability=None,
     equipment=None,
     intake=None,
 ):
     """Creates a youth profile. Returns the new youth's UUID (as str).
+
+    email/password are required — without them this registration would
+    be a dead end with no way for the person to come back and prove
+    it's them, which is what every trial/capability/opportunity screen
+    in the product depends on. Existing pre-auth youth rows (created
+    before this was required) keep working with a null email/password;
+    they just can't log in until one is set.
 
     Note: `skills` is intentionally not accepted here — capabilities are
     normalized into activation.youth_capabilities (see capability_service),
@@ -29,10 +39,16 @@ def create_youth(
     `intake` column; nothing in this function inspects its contents.
     """
 
+    if not email or "@" not in email:
+        raise ValueError("A valid email is required")
+
+    if not password or len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+
     try:
         with transaction() as db:
 
-            existing = db.execute(
+            existing_name = db.execute(
                 """
                 SELECT id
                 FROM youth
@@ -41,15 +57,28 @@ def create_youth(
                 (name.strip(),),
             ).fetchone()
 
-            if existing:
+            if existing_name:
                 raise ValueError("Youth profile already exists")
+
+            existing_email = db.execute(
+                """
+                SELECT id
+                FROM youth
+                WHERE lower(email) = lower(?)
+                """,
+                (email.strip(),),
+            ).fetchone()
+
+            if existing_email:
+                raise ValueError("An account with this email already exists")
 
             row = db.execute(
                 """
                 INSERT INTO youth (
-                    name, location, passion, goal, availability, equipment, intake
+                    name, location, passion, goal, availability, equipment,
+                    intake, email, password_hash
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 (
@@ -60,6 +89,8 @@ def create_youth(
                     availability,
                     equipment,
                     psycopg2.extras.Json(intake) if intake else None,
+                    email.strip(),
+                    hash_password(password),
                 ),
             ).fetchone()
 
@@ -84,6 +115,33 @@ def create_youth(
     return str(youth_id)
 
 
+def authenticate_youth(email, password):
+    """Returns the youth's UUID (as str) if email/password match a real
+    account, otherwise raises ValueError. Deliberately uses the same
+    error message whether the email doesn't exist or the password is
+    wrong — distinguishing the two would let someone probe which
+    emails are registered."""
+
+    if not email or not password:
+        raise ValueError("Invalid email or password")
+
+    with transaction() as db:
+
+        row = db.execute(
+            """
+            SELECT id, password_hash
+            FROM youth
+            WHERE lower(email) = lower(?)
+            """,
+            (email.strip(),),
+        ).fetchone()
+
+    if not row or not row["password_hash"] or not verify_password(password, row["password_hash"]):
+        raise ValueError("Invalid email or password")
+
+    return str(row["id"])
+
+
 def get_youth(youth_id):
 
     if not youth_id:
@@ -99,7 +157,9 @@ def get_youth(youth_id):
     if not row:
         raise ValueError("Youth not found")
 
-    return dict(row)
+    youth = dict(row)
+    youth.pop("password_hash", None)
+    return youth
 
 
 def list_youth(limit=50, offset=0):
