@@ -20,14 +20,17 @@ const API_BASE = "https://bstm-v5.vercel.app";
 // skillLevel, income, capital, challenges) go into `intake` as a full
 // raw snapshot, alongside everything else, rather than being dropped.
 function mapYouthPayload(y) {
+  const { password, ...intakeSnapshot } = y;
   return {
     name: y.name,
     location: y.location,
     goal: y.aspiration,
+    email: y.email,
+    password: y.password,
     passion: (y.interests || []).join(", ") || null,
     availability: y.availability || null,
     equipment: (y.resources || []).join(", ") || null,
-    intake: y,
+    intake: intakeSnapshot,
   };
 }
 
@@ -67,6 +70,51 @@ async function createBusinessRecord(b) {
   }
 
   return body.id;
+}
+
+// Token lives in localStorage so a returning youth doesn't have to log
+// in on every visit — this is a real deployed site (not a sandboxed
+// Claude artifact), so localStorage is the normal, correct tool here.
+const TOKEN_STORAGE_KEY = "bstm_access_token";
+
+function saveToken(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+function loadToken() {
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+async function loginYouth(email, password) {
+  const response = await fetch(`${API_BASE}/youth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(body.detail || `Login failed (${response.status})`);
+  }
+
+  return body.access_token;
+}
+
+async function fetchMyProfile(token) {
+  const response = await fetch(`${API_BASE}/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error("Session expired or invalid");
+  }
+
+  return response.json();
 }
 
 const DEPARTMENTS = [
@@ -127,13 +175,23 @@ const YOUTH_STEPS = [
       <div class="field-row">
         <label class="field-label">Location</label>
         <input type="text" id="f-location" value="${s.location || ""}" placeholder="Gaborone, Mochudi, Maun...">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Email</label>
+        <input type="email" id="f-email" value="${s.email || ""}" placeholder="you@example.com">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Password</label>
+        <input type="password" id="f-password" value="${s.password || ""}" placeholder="At least 8 characters">
       </div>`,
     read: (s) => {
       s.name = document.getElementById("f-name").value.trim();
       s.age = document.getElementById("f-age").value;
       s.location = document.getElementById("f-location").value.trim();
+      s.email = document.getElementById("f-email").value.trim();
+      s.password = document.getElementById("f-password").value;
     },
-    valid: (s) => s.name && s.age && s.location,
+    valid: (s) => s.name && s.age && s.location && s.email && s.email.includes("@") && s.password && s.password.length >= 8,
   },
   {
     id: "position",
@@ -228,6 +286,7 @@ const state = {
   youth: {},
   business: {},
   audit: { ratings: {}, rooms: [] },
+  myProfile: null,
 };
 
 /* ---------------- helpers ---------------- */
@@ -400,10 +459,12 @@ function renderDoors() {
         <div class="door-desc">Fast-mode 100 Trials field audit — built for filling in minutes, not pages.</div>
       </button>
     </div>
+    <button class="skip-link" id="login-link" style="margin-top:24px;">Already have an account? Log in →</button>
   `;
   document.getElementById("door-youth").addEventListener("click", () => go("youth", 0));
   document.getElementById("door-business").addEventListener("click", () => go("business-intake"));
   document.getElementById("door-audit").addEventListener("click", () => go("audit"));
+  document.getElementById("login-link").addEventListener("click", () => go("login"));
 }
 
 /* ---------------- render: youth wizard ---------------- */
@@ -780,6 +841,105 @@ function showToast(msg) {
   setTimeout(() => toast.remove(), 2200);
 }
 
+/* ---------------- render: login ---------------- */
+
+function renderLogin() {
+  document.getElementById("stage").innerHTML = `
+    <div class="wizard">
+      <div class="step-eyebrow">Welcome back</div>
+      <div class="step-title">Log in to your BSTM account</div>
+      <div class="field-row">
+        <label class="field-label">Email</label>
+        <input type="email" id="l-email" placeholder="you@example.com">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Password</label>
+        <input type="password" id="l-password" placeholder="Your password">
+      </div>
+    </div>
+    <div class="wizard-nav">
+      <button class="btn btn-ghost" id="login-back">← Doors</button>
+      <button class="btn btn-primary" id="login-submit">Log in</button>
+    </div>
+  `;
+  document.getElementById("login-back").addEventListener("click", () => go("doors"));
+  document.getElementById("login-submit").addEventListener("click", async () => {
+    const email = document.getElementById("l-email").value.trim();
+    const password = document.getElementById("l-password").value;
+    if (!email || !password) { flashInvalidNav("login-submit"); return; }
+
+    const btn = document.getElementById("login-submit");
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Logging in...";
+
+    try {
+      const token = await loginYouth(email, password);
+      saveToken(token);
+      const profile = await fetchMyProfile(token);
+      state.myProfile = profile;
+      go("dashboard");
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      showSubmissionError(err.message);
+    }
+  });
+}
+
+/* ---------------- render: dashboard ---------------- */
+
+function renderDashboard() {
+  const p = state.myProfile;
+
+  if (!p) {
+    // Reached directly (e.g. page reload) without a profile loaded
+    // into state yet — go through the boot-time auto-login check
+    // instead of rendering with nothing to show.
+    go("boot");
+    return;
+  }
+
+  document.getElementById("stage").innerHTML = `
+    <div class="center-fill" style="min-height:auto;padding-top:48px;">
+      <div class="threshold-sub">My BSTM</div>
+      <div class="threshold-title" style="font-size:clamp(22px,5vw,32px);">${p.name}</div>
+    </div>
+    <div class="doors" style="grid-template-columns:1fr 1fr;">
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Level</div>
+        <div class="door-title">${p.level}</div>
+      </div>
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Capability score</div>
+        <div class="door-title">${p.capability_score}</div>
+      </div>
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Reliability score</div>
+        <div class="door-title">${p.reliability_score}</div>
+      </div>
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Completed trials</div>
+        <div class="door-title">${p.completed_trials}</div>
+      </div>
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Completed opportunities</div>
+        <div class="door-title">${p.completed_opportunities}</div>
+      </div>
+      <div class="door" style="cursor:default;">
+        <div class="door-eyebrow">Goal</div>
+        <div class="door-title" style="font-size:16px;">${p.goal || "—"}</div>
+      </div>
+    </div>
+    <button class="skip-link" id="logout-link" style="margin-top:24px;">Log out</button>
+  `;
+  document.getElementById("logout-link").addEventListener("click", () => {
+    clearToken();
+    state.myProfile = null;
+    go("doors");
+  });
+}
+
 /* ---------------- router ---------------- */
 
 function go(route, youthStep) {
@@ -799,8 +959,29 @@ function render() {
     case "business-loading": return renderBusinessLoading();
     case "business-result": return renderBusinessResult();
     case "audit": return renderAudit();
+    case "login": return renderLogin();
+    case "dashboard": return renderDashboard();
     default: return renderBoot();
   }
 }
 
-render();
+// On load, if a token is already stored (a returning youth), try it
+// silently before showing the boot sequence at all. A dead/expired
+// token just falls through to the normal boot flow rather than
+// blocking anything.
+(async function bootstrap() {
+  const token = loadToken();
+
+  if (token) {
+    try {
+      state.myProfile = await fetchMyProfile(token);
+      state.route = "dashboard";
+      render();
+      return;
+    } catch (err) {
+      clearToken();
+    }
+  }
+
+  render();
+})();
