@@ -117,6 +117,35 @@ async function fetchMyProfile(token) {
   return response.json();
 }
 
+async function fetchMyTrials(token) {
+  const response = await fetch(`${API_BASE}/me/trials`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.ok ? response.json() : [];
+}
+
+async function fetchMyEvidence(token) {
+  const response = await fetch(`${API_BASE}/me/evidence`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.ok ? response.json() : [];
+}
+
+// No escaping helper existed anywhere in this file before this change —
+// a pre-existing gap across the whole app, not something introduced
+// here. Not retrofitting every existing template string in this pass
+// (that's a separate audit), but anything new being written now
+// (the dashboard) uses this rather than adding to the problem.
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const DEPARTMENTS = [
   { id: "ai-ml", name: "AI & Machine Learning", cat: "Technology", tags: ["technology", "research"], resource: "high", entry: "Telegram AI bot builds" },
   { id: "trading", name: "Trading Automation", cat: "Technology", tags: ["technology", "finance"], resource: "medium", entry: "Custom MT5 indicators" },
@@ -876,8 +905,14 @@ function renderLogin() {
     try {
       const token = await loginYouth(email, password);
       saveToken(token);
-      const profile = await fetchMyProfile(token);
+      const [profile, trials, evidence] = await Promise.all([
+        fetchMyProfile(token),
+        fetchMyTrials(token),
+        fetchMyEvidence(token),
+      ]);
       state.myProfile = profile;
+      state.myTrials = trials;
+      state.myEvidence = evidence;
       go("dashboard");
     } catch (err) {
       btn.disabled = false;
@@ -900,42 +935,76 @@ function renderDashboard() {
     return;
   }
 
+  const trials = state.myTrials || [];
+  const evidence = state.myEvidence || [];
+
+  const trialsList = trials.length
+    ? trials.map((t) => `
+        <div class="door" style="cursor:default;">
+          <div class="door-eyebrow">${escapeHtml(t.status)}</div>
+          <div class="door-title" style="font-size:16px;">${escapeHtml(t.title || t.opportunity_title)}</div>
+        </div>
+      `).join("")
+    : `<div class="door" style="cursor:default;"><div class="door-title" style="font-size:15px;">No trials yet</div></div>`;
+
+  const evidenceList = evidence.length
+    ? evidence.map((e) => `
+        <div class="door" style="cursor:default;">
+          <div class="door-eyebrow">${escapeHtml(e.kind)}</div>
+          <div class="door-title" style="font-size:16px;">${escapeHtml(e.notes || e.url || "—")}</div>
+        </div>
+      `).join("")
+    : `<div class="door" style="cursor:default;"><div class="door-title" style="font-size:15px;">No evidence submitted yet</div></div>`;
+
   document.getElementById("stage").innerHTML = `
     <div class="center-fill" style="min-height:auto;padding-top:48px;">
       <div class="threshold-sub">My BSTM</div>
-      <div class="threshold-title" style="font-size:clamp(22px,5vw,32px);">${p.name}</div>
+      <div class="threshold-title" style="font-size:clamp(22px,5vw,32px);">${escapeHtml(p.name)}</div>
     </div>
     <div class="doors" style="grid-template-columns:1fr 1fr;">
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Level</div>
-        <div class="door-title">${p.level}</div>
+        <div class="door-title">${escapeHtml(p.level)}</div>
       </div>
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Capability score</div>
-        <div class="door-title">${p.capability_score}</div>
+        <div class="door-title">${escapeHtml(p.capability_score)}</div>
       </div>
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Reliability score</div>
-        <div class="door-title">${p.reliability_score}</div>
+        <div class="door-title">${escapeHtml(p.reliability_score)}</div>
       </div>
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Completed trials</div>
-        <div class="door-title">${p.completed_trials}</div>
+        <div class="door-title">${escapeHtml(p.completed_trials)}</div>
       </div>
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Completed opportunities</div>
-        <div class="door-title">${p.completed_opportunities}</div>
+        <div class="door-title">${escapeHtml(p.completed_opportunities)}</div>
       </div>
       <div class="door" style="cursor:default;">
         <div class="door-eyebrow">Goal</div>
-        <div class="door-title" style="font-size:16px;">${p.goal || "—"}</div>
+        <div class="door-title" style="font-size:16px;">${escapeHtml(p.goal) || "—"}</div>
       </div>
     </div>
+
+    <div class="threshold-sub" style="margin-top:32px;">My trials</div>
+    <div class="doors" style="grid-template-columns:1fr;">
+      ${trialsList}
+    </div>
+
+    <div class="threshold-sub" style="margin-top:32px;">My evidence</div>
+    <div class="doors" style="grid-template-columns:1fr;">
+      ${evidenceList}
+    </div>
+
     <button class="skip-link" id="logout-link" style="margin-top:24px;">Log out</button>
   `;
   document.getElementById("logout-link").addEventListener("click", () => {
     clearToken();
     state.myProfile = null;
+    state.myTrials = null;
+    state.myEvidence = null;
     go("doors");
   });
 }
@@ -974,7 +1043,14 @@ function render() {
 
   if (token) {
     try {
-      state.myProfile = await fetchMyProfile(token);
+      const [profile, trials, evidence] = await Promise.all([
+        fetchMyProfile(token),
+        fetchMyTrials(token),
+        fetchMyEvidence(token),
+      ]);
+      state.myProfile = profile;
+      state.myTrials = trials;
+      state.myEvidence = evidence;
       state.route = "dashboard";
       render();
       return;

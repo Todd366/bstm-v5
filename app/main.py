@@ -147,7 +147,7 @@ _LOGIN_PATH = ("POST", "/youth/login")
 # a youth's token proves who THEY are, not that they're allowed to
 # perform admin operations, and vice versa the admin key was never
 # meant to represent a specific youth's identity.
-_YOUTH_AUTH_PATHS = {("GET", "/me")}
+_YOUTH_AUTH_PATHS = {("GET", "/me"), ("GET", "/me/trials"), ("GET", "/me/evidence")}
 
 
 def _get_client_ip(scope, headers):
@@ -473,6 +473,16 @@ def login_youth_route(payload: YouthLogin):
 @app.get("/me")
 def get_my_profile_route(request: Request):
     return _service_call(get_youth_profile, request.state.youth_id)
+
+
+@app.get("/me/trials")
+def get_my_trials_route(request: Request):
+    return _service_call(list_youth_opportunity_trials, request.state.youth_id)
+
+
+@app.get("/me/evidence")
+def get_my_evidence_route(request: Request):
+    return _service_call(list_youth_evidence_records, request.state.youth_id)
 
 
 @app.get("/youth")
