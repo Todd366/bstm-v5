@@ -12,6 +12,7 @@ logic lives in app.services.*, not here.
 import asyncio
 import json
 import logging
+import os
 import secrets
 import time
 import traceback
@@ -22,12 +23,18 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import Headers
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.core.config import API_KEY, APP_NAME, APP_VERSION, ENVIRONMENT
 from app.services.rate_limit_service import check_rate_limit
 from app.services.auth_service import decode_access_token
+
+# index.html/script.js/style.css sit at the repo root, one level above
+# this file's own directory (app/). Serving them from the same FastAPI
+# app — same Vercel project, same deployment — rather than as a
+# separate static site, since one app doesn't need two projects.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from app.api.service import (
     accept_opportunity_assignment,
@@ -122,7 +129,7 @@ app.add_middleware(
 
 # Paths reachable with no API key: health checks and monitoring need to
 # work without a secret, and the auto-generated docs are read-only.
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/script.js", "/style.css"}
 
 # (method, path) pairs that are public BY DESIGN, not oversight: these
 # are the self-service intake/auth actions the real public-facing
@@ -450,12 +457,17 @@ def health():
 
 @app.get("/")
 def root():
-    return {
-        "service": APP_NAME,
-        "version": APP_VERSION,
-        "environment": ENVIRONMENT,
-        "docs": "/docs",
-    }
+    return FileResponse(os.path.join(_REPO_ROOT, "index.html"))
+
+
+@app.get("/script.js")
+def serve_script():
+    return FileResponse(os.path.join(_REPO_ROOT, "script.js"), media_type="application/javascript")
+
+
+@app.get("/style.css")
+def serve_style():
+    return FileResponse(os.path.join(_REPO_ROOT, "style.css"), media_type="text/css")
 
 
 # ---------- youth ----------
