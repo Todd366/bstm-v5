@@ -90,10 +90,10 @@ def match_youth_to_opportunities(youth_id):
                 ON c.id = yc.capability_id
             WHERE o.status = 'Open'
             AND (
-                LOWER(o.title) LIKE '%' || LOWER(c.name) || '%'
-                OR LOWER(COALESCE(o.description, '')) LIKE '%' || LOWER(c.name) || '%'
-                OR LOWER(o.title) LIKE '%' || LOWER(c.category) || '%'
-                OR LOWER(COALESCE(o.description, '')) LIKE '%' || LOWER(c.category) || '%'
+                LOWER(o.title) LIKE '%%' || LOWER(c.name) || '%%'
+                OR LOWER(COALESCE(o.description, '')) LIKE '%%' || LOWER(c.name) || '%%'
+                OR LOWER(o.title) LIKE '%%' || LOWER(c.category) || '%%'
+                OR LOWER(COALESCE(o.description, '')) LIKE '%%' || LOWER(c.category) || '%%'
             )
             """,
             (youth_id,),

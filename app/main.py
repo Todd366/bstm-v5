@@ -43,6 +43,7 @@ from app.api.service import (
     login_youth,
     assign_opportunity,
     assign_youth_capability,
+    claim_my_capability,
     cancel_opportunity_assignment,
     cancel_opportunity_trial,
     complete_opportunity_assignment,
@@ -52,6 +53,7 @@ from app.api.service import (
     create_youth_capability,
     decline_opportunity_assignment,
     find_youth_opportunities,
+    apply_to_opportunity,
     get_business_opportunity,
     get_business_profile,
     get_dashboard,
@@ -154,7 +156,16 @@ _LOGIN_PATH = ("POST", "/youth/login")
 # a youth's token proves who THEY are, not that they're allowed to
 # perform admin operations, and vice versa the admin key was never
 # meant to represent a specific youth's identity.
-_YOUTH_AUTH_PATHS = {("GET", "/me"), ("GET", "/me/trials"), ("GET", "/me/evidence")}
+def _is_youth_auth_path(path):
+    """True for any route authenticated via a youth's own JWT rather
+    than the admin X-API-Key. A prefix check, not an exact-match set,
+    because some of these routes have dynamic segments (e.g.
+    /me/opportunities/{opportunity_id}/apply) that would never match a
+    literal set entry — every JWT-protected route lives under /me by
+    design, so this covers current and future ones without needing a
+    new entry added per route."""
+
+    return path == "/me" or path.startswith("/me/")
 
 
 def _get_client_ip(scope, headers):
@@ -202,7 +213,7 @@ class AuthAndLoggingMiddleware:
             method != "OPTIONS"
             and path not in _PUBLIC_PATHS
             and (method, path) not in _PUBLIC_WRITES
-            and (method, path) not in _YOUTH_AUTH_PATHS
+            and not _is_youth_auth_path(path)
         )
 
         if requires_auth:
@@ -228,7 +239,7 @@ class AuthAndLoggingMiddleware:
                 await response(scope, receive, send)
                 return
 
-        if (method, path) in _YOUTH_AUTH_PATHS:
+        if _is_youth_auth_path(path):
             auth_header = headers.get("authorization", "")
             token = auth_header[7:] if auth_header.lower().startswith("bearer ") else None
 
@@ -495,6 +506,21 @@ def get_my_trials_route(request: Request):
 @app.get("/me/evidence")
 def get_my_evidence_route(request: Request):
     return _service_call(list_youth_evidence_records, request.state.youth_id)
+
+
+@app.get("/me/opportunities")
+def get_my_opportunities_route(request: Request):
+    return _service_call(find_youth_opportunities, request.state.youth_id)
+
+
+@app.post("/me/opportunities/{opportunity_id}/apply", status_code=201)
+def apply_to_opportunity_route(opportunity_id: str, request: Request):
+    return _service_call(apply_to_opportunity, request.state.youth_id, opportunity_id)
+
+
+@app.post("/me/capabilities", status_code=201)
+def claim_my_capability_route(payload: CapabilityAssign, request: Request):
+    return _service_call(claim_my_capability, request.state.youth_id, payload.dict())
 
 
 @app.get("/youth")

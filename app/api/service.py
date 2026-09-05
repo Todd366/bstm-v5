@@ -169,6 +169,25 @@ def assign_youth_capability(data):
     }
 
 
+def claim_my_capability(youth_id, data):
+    """Self-service version of assign_youth_capability — youth_id comes
+    from the caller's own JWT (see /me/capabilities in main.py), never
+    from the request body, so a youth can only ever claim a capability
+    for themselves. Always lands as unverified, same as the admin path
+    — self-claiming is 'claimed', not 'verified', by design."""
+
+    youth_capability_id = assign_capability_to_youth(
+        youth_id=youth_id,
+        capability_id=data["capability_id"],
+        level=data.get("level", "Beginner")
+    )
+
+    return {
+        "status": "claimed",
+        "id": youth_capability_id
+    }
+
+
 def list_capability_records():
 
     return list_capabilities()
@@ -186,6 +205,37 @@ def find_youth_opportunities(youth_id):
     return match_youth_to_opportunities(
         youth_id
     )
+
+
+def apply_to_opportunity(youth_id, opportunity_id):
+    """Self-service 'Apply' action — combines what would otherwise be
+    two separate admin operations (create a match, then create an
+    assignment from it) into one, since a real applicant experiences
+    this as a single action, not two. match_score is a fixed modest
+    value (not a computed fit score) because this represents a raw
+    self-application, not the system's own assessment of fit — real
+    match scoring still belongs to whatever process generates
+    discovered/recommended opportunities, not to the act of applying
+    to one directly."""
+
+    match_id = create_opportunity_match(
+        youth_id=youth_id,
+        opportunity_id=opportunity_id,
+        match_score=50,
+        reason={"source": "self_application"}
+    )
+
+    assignment_id = create_assignment(
+        youth_id=youth_id,
+        opportunity_id=opportunity_id,
+        match_id=match_id
+    )
+
+    return {
+        "status": "applied",
+        "match_id": match_id,
+        "assignment_id": assignment_id
+    }
 
 
 def match_youth_opportunity(data):
