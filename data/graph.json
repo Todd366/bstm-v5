@@ -1,0 +1,200 @@
+{
+  "nodes": [
+    {
+      "id": "D-4f56cdd0",
+      "type": "department",
+      "label": "AI & Machine Learning",
+      "metadata": {}
+    },
+    {
+      "id": "D-ab526627",
+      "type": "department",
+      "label": "Trading Automation",
+      "metadata": {}
+    },
+    {
+      "id": "D-70065e24",
+      "type": "department",
+      "label": "VPN & Network Security",
+      "metadata": {}
+    },
+    {
+      "id": "D-6ad4c038",
+      "type": "department",
+      "label": "Web Development",
+      "metadata": {}
+    },
+    {
+      "id": "D-e1d537fe",
+      "type": "department",
+      "label": "Mobile Application Development",
+      "metadata": {}
+    },
+    {
+      "id": "D-3e880990",
+      "type": "department",
+      "label": "System Integration & API",
+      "metadata": {}
+    },
+    {
+      "id": "D-96942a88",
+      "type": "department",
+      "label": "Data Science & Analytics",
+      "metadata": {}
+    },
+    {
+      "id": "D-9feb7ec0",
+      "type": "department",
+      "label": "Blockchain & Cryptocurrency",
+      "metadata": {}
+    },
+    {
+      "id": "D-cd5f72ae",
+      "type": "department",
+      "label": "Graphic Design & Branding",
+      "metadata": {}
+    },
+    {
+      "id": "D-f95ce649",
+      "type": "department",
+      "label": "Content Creation & Copywriting",
+      "metadata": {}
+    },
+    {
+      "id": "D-5a3505df",
+      "type": "department",
+      "label": "Social Media Management",
+      "metadata": {}
+    },
+    {
+      "id": "D-483edc0a",
+      "type": "department",
+      "label": "Digital Marketing & Advertising",
+      "metadata": {}
+    },
+    {
+      "id": "D-66946524",
+      "type": "department",
+      "label": "BSTM Tutorial Center",
+      "metadata": {}
+    },
+    {
+      "id": "D-344009f2",
+      "type": "department",
+      "label": "Private Security",
+      "metadata": {}
+    },
+    {
+      "id": "D-0959f065",
+      "type": "department",
+      "label": "Music Department",
+      "metadata": {}
+    },
+    {
+      "id": "D-627ee2fd",
+      "type": "department",
+      "label": "CabLink Transportation",
+      "metadata": {}
+    },
+    {
+      "id": "D-eecfe735",
+      "type": "department",
+      "label": "Finance & Accounting",
+      "metadata": {}
+    },
+    {
+      "id": "D-e21e8732",
+      "type": "department",
+      "label": "Marketplace & E-Commerce",
+      "metadata": {}
+    },
+    {
+      "id": "D-f6d33007",
+      "type": "department",
+      "label": "Research & Development",
+      "metadata": {}
+    },
+    {
+      "id": "D-367eba36",
+      "type": "department",
+      "label": "Healthcare Information & Wellness",
+      "metadata": {}
+    },
+    {
+      "id": "D-8c52d392",
+      "type": "department",
+      "label": "Nutrition & Health Products",
+      "metadata": {}
+    },
+    {
+      "id": "D-df810411",
+      "type": "department",
+      "label": "Micro Farming & Urban Agriculture",
+      "metadata": {}
+    },
+    {
+      "id": "D-0c62d3ee",
+      "type": "department",
+      "label": "Sustainability & Environment",
+      "metadata": {}
+    },
+    {
+      "id": "D-7804b67d",
+      "type": "department",
+      "label": "Human Resources & Talent Development",
+      "metadata": {}
+    },
+    {
+      "id": "D-15169fb7",
+      "type": "department",
+      "label": "Project Management Office",
+      "metadata": {}
+    },
+    {
+      "id": "D-f15b8d7e",
+      "type": "department",
+      "label": "Legal & Compliance",
+      "metadata": {}
+    },
+    {
+      "id": "D-5ecdf1df",
+      "type": "department",
+      "label": "G.I.N — Global Intelligence Network",
+      "metadata": {}
+    },
+    {
+      "id": "D-4381b7af",
+      "type": "department",
+      "label": "BSTM Clothing Brand",
+      "metadata": {}
+    },
+    {
+      "id": "D-016e4db3",
+      "type": "department",
+      "label": "Spiritual Guidance & Consciousness",
+      "metadata": {}
+    },
+    {
+      "id": "D-d3955fc0",
+      "type": "department",
+      "label": "BHD — Black Hole Drive",
+      "metadata": {}
+    },
+    {
+      "id": "Y-6d51809d",
+      "type": "youth",
+      "label": "",
+      "metadata": {
+        "passion": "",
+        "skills": ""
+      }
+    },
+    {
+      "id": "B-a69b36dd",
+      "type": "business",
+      "label": "",
+      "metadata": {}
+    }
+  ],
+  "edges": []
+}

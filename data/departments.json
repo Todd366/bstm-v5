@@ -1,0 +1,182 @@
+[
+  {
+    "id": "D-4f56cdd0",
+    "name": "AI & Machine Learning",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.024501+00:00"
+  },
+  {
+    "id": "D-ab526627",
+    "name": "Trading Automation",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.025636+00:00"
+  },
+  {
+    "id": "D-70065e24",
+    "name": "VPN & Network Security",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.026243+00:00"
+  },
+  {
+    "id": "D-6ad4c038",
+    "name": "Web Development",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.026802+00:00"
+  },
+  {
+    "id": "D-e1d537fe",
+    "name": "Mobile Application Development",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.027475+00:00"
+  },
+  {
+    "id": "D-3e880990",
+    "name": "System Integration & API",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.028114+00:00"
+  },
+  {
+    "id": "D-96942a88",
+    "name": "Data Science & Analytics",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.028774+00:00"
+  },
+  {
+    "id": "D-9feb7ec0",
+    "name": "Blockchain & Cryptocurrency",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.029580+00:00"
+  },
+  {
+    "id": "D-cd5f72ae",
+    "name": "Graphic Design & Branding",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.030341+00:00"
+  },
+  {
+    "id": "D-f95ce649",
+    "name": "Content Creation & Copywriting",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.031103+00:00"
+  },
+  {
+    "id": "D-5a3505df",
+    "name": "Social Media Management",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.031898+00:00"
+  },
+  {
+    "id": "D-483edc0a",
+    "name": "Digital Marketing & Advertising",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.032748+00:00"
+  },
+  {
+    "id": "D-66946524",
+    "name": "BSTM Tutorial Center",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.033675+00:00"
+  },
+  {
+    "id": "D-344009f2",
+    "name": "Private Security",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.034600+00:00"
+  },
+  {
+    "id": "D-0959f065",
+    "name": "Music Department",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.035553+00:00"
+  },
+  {
+    "id": "D-627ee2fd",
+    "name": "CabLink Transportation",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.036655+00:00"
+  },
+  {
+    "id": "D-eecfe735",
+    "name": "Finance & Accounting",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.037878+00:00"
+  },
+  {
+    "id": "D-e21e8732",
+    "name": "Marketplace & E-Commerce",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.039004+00:00"
+  },
+  {
+    "id": "D-f6d33007",
+    "name": "Research & Development",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.040152+00:00"
+  },
+  {
+    "id": "D-367eba36",
+    "name": "Healthcare Information & Wellness",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.041570+00:00"
+  },
+  {
+    "id": "D-8c52d392",
+    "name": "Nutrition & Health Products",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.042874+00:00"
+  },
+  {
+    "id": "D-df810411",
+    "name": "Micro Farming & Urban Agriculture",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.044227+00:00"
+  },
+  {
+    "id": "D-0c62d3ee",
+    "name": "Sustainability & Environment",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.045637+00:00"
+  },
+  {
+    "id": "D-7804b67d",
+    "name": "Human Resources & Talent Development",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.047042+00:00"
+  },
+  {
+    "id": "D-15169fb7",
+    "name": "Project Management Office",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.048402+00:00"
+  },
+  {
+    "id": "D-f15b8d7e",
+    "name": "Legal & Compliance",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.049878+00:00"
+  },
+  {
+    "id": "D-5ecdf1df",
+    "name": "G.I.N — Global Intelligence Network",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.051355+00:00"
+  },
+  {
+    "id": "D-4381b7af",
+    "name": "BSTM Clothing Brand",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.052891+00:00"
+  },
+  {
+    "id": "D-016e4db3",
+    "name": "Spiritual Guidance & Consciousness",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.054516+00:00"
+  },
+  {
+    "id": "D-d3955fc0",
+    "name": "BHD — Black Hole Drive",
+    "status": "Active",
+    "created_at": "2026-08-02T11:32:25.056108+00:00"
+  }
+]

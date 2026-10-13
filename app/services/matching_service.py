@@ -1,0 +1,324 @@
+import json
+import re
+
+import psycopg2.extras
+
+from app.core.validation import require_uuid
+from app.db.database import transaction
+
+
+LEVEL_WEIGHTS = {
+    "Beginner": 0,
+    "Developing": 5,
+    "Intermediate": 10,
+    "Advanced": 15,
+    "Expert": 20,
+}
+
+LOCATION_BONUS = 10
+MAX_CANDIDATES = 300
+
+_word_cache = {}
+
+
+def _contains_term(text, term):
+    """Whole-word / whole-phrase match, so a capability called "AI" does
+    not match "retail" or "email"."""
+
+    if not term or not text:
+        return False
+
+    pattern = _word_cache.get(term)
+
+    if pattern is None:
+        pattern = re.compile(r"(?<!\w)" + re.escape(term) + r"(?!\w)")
+        _word_cache[term] = pattern
+
+    return bool(pattern.search(text))
+
+
+def calculate_match_score(
+    capability_name,
+    capability_category,
+    level,
+    verified,
+    opportunity_title,
+    opportunity_description,
+):
+    """0-100 fit between one claimed capability and one opportunity.
+    Returns 0 when the opportunity's text mentions neither the
+    capability nor its category (level and verification only ever
+    strengthen a real text match, they never create one)."""
+
+    title = (opportunity_title or "").lower()
+    description = (opportunity_description or "").lower()
+    name = (capability_name or "").lower().strip()
+    category = (capability_category or "").lower().strip()
+
+    score = 0
+    name_hit = False
+    strong_category_hit = False
+
+    if _contains_term(title, name):
+        score += 50
+        name_hit = True
+    elif _contains_term(description, name):
+        score += 30
+        name_hit = True
+
+    if _contains_term(title, category):
+        score += 20
+        strong_category_hit = True
+    elif _contains_term(description, category):
+        score += 10
+
+    # A category word alone in the description ("business", "community")
+    # is too common to mean anything: require the capability's own name,
+    # or its category in the title.
+    if not (name_hit or strong_category_hit):
+        return 0
+
+    if score == 0:
+        return 0
+
+    score += LEVEL_WEIGHTS.get(level, 0)
+
+    if verified:
+        score += 10
+
+    return min(score, 100)
+
+
+def _same_place(a, b):
+    """Loose place match: 'Mochudi' vs 'mochudi, kgatleng' → True."""
+
+    a = (a or "").lower().strip()
+    b = (b or "").lower().strip()
+
+    if not a or not b:
+        return False
+
+    return a in b or b in a
+
+
+def match_youth_to_opportunities(youth_id, limit=50):
+    """Open opportunities that fit this youth's claimed capabilities,
+    best first — one row per opportunity, with the capability that
+    matched best. Opportunities the youth already applied to are left
+    out. Opportunities in the youth's own town/village get a bonus.
+    Includes department-sourced opportunities (no business)."""
+
+    youth_id = require_uuid(youth_id, "Youth")
+    limit = max(1, min(int(limit), 100))
+
+    with transaction() as db:
+
+        youth = db.execute(
+            "SELECT id, name, location FROM youth WHERE id = ?",
+            (youth_id,),
+        ).fetchone()
+
+        if not youth:
+            raise ValueError("Youth not found")
+
+        capabilities = db.execute(
+            """
+            SELECT yc.capability_id, c.name AS capability_name,
+                   c.category AS capability_category, yc.level, yc.verified
+            FROM youth_capabilities yc
+            JOIN capabilities c ON c.id = yc.capability_id
+            WHERE yc.youth_id = ?
+            """,
+            (youth_id,),
+        ).fetchall()
+
+        if not capabilities:
+            return []
+
+        opportunities = db.execute(
+            """
+            SELECT o.id AS opportunity_id, o.business_id,
+                   b.name AS business_name, b.location AS business_location,
+                   o.title, o.description, o.department, o.budget,
+                   o.status, o.created_at
+            FROM opportunities o
+            LEFT JOIN businesses b ON b.id = o.business_id
+            WHERE o.status = 'Open'
+              AND NOT EXISTS (
+                  SELECT 1 FROM opportunity_assignments oa
+                  WHERE oa.opportunity_id = o.id AND oa.youth_id = ?
+              )
+            ORDER BY o.created_at DESC
+            LIMIT ?
+            """,
+            (youth_id, MAX_CANDIDATES),
+        ).fetchall()
+
+    results = []
+
+    for opp in opportunities:
+
+        searchable_description = " ".join(
+            part for part in (opp["description"], opp["department"]) if part
+        )
+
+        best = None
+        matched_names = []
+
+        for cap in capabilities:
+
+            score = calculate_match_score(
+                capability_name=cap["capability_name"],
+                capability_category=cap["capability_category"],
+                level=cap["level"],
+                verified=cap["verified"],
+                opportunity_title=opp["title"],
+                opportunity_description=searchable_description,
+            )
+
+            if score <= 0:
+                continue
+
+            matched_names.append(cap["capability_name"])
+
+            if best is None or score > best[0]:
+                best = (score, cap)
+
+        if best is None:
+            continue
+
+        score, cap = best
+        reasons = ["Matches your skill: " + cap["capability_name"]]
+
+        if _same_place(youth["location"], opp["business_location"]):
+            score = min(100, score + LOCATION_BONUS)
+            reasons.append("In your area")
+
+        result = dict(opp)
+        result.update(
+            {
+                "match_score": score,
+                "capability_id": cap["capability_id"],
+                "capability_name": cap["capability_name"],
+                "capability_category": cap["capability_category"],
+                "level": cap["level"],
+                "verified": cap["verified"],
+                "matched_capabilities": matched_names,
+                "reasons": reasons,
+            }
+        )
+        results.append(result)
+
+    results.sort(key=lambda r: (r["match_score"], r["created_at"]), reverse=True)
+
+    return results[:limit]
+
+
+def create_opportunity_match(youth_id, opportunity_id, match_score=0, reason=None):
+
+    youth_id = require_uuid(youth_id, "Youth")
+    opportunity_id = require_uuid(opportunity_id, "Opportunity")
+
+    with transaction() as db:
+
+        youth = db.execute(
+            "SELECT id, name FROM youth WHERE id = ?",
+            (youth_id,),
+        ).fetchone()
+
+        if not youth:
+            raise ValueError("Youth not found")
+
+        opportunity = db.execute(
+            "SELECT id, business_id, title, status FROM opportunities WHERE id = ?",
+            (opportunity_id,),
+        ).fetchone()
+
+        if not opportunity:
+            raise ValueError("Opportunity not found")
+
+        existing = db.execute(
+            "SELECT id FROM opportunity_matches WHERE youth_id = ? AND opportunity_id = ?",
+            (youth_id, opportunity_id),
+        ).fetchone()
+
+        if existing:
+            return str(existing["id"])
+
+        reason_param = psycopg2.extras.Json(reason) if reason is not None else None
+
+        row = db.execute(
+            """
+            INSERT INTO opportunity_matches (
+                youth_id, opportunity_id, match_score, reason, status
+            )
+            VALUES (?, ?, ?, ?, 'Suggested')
+            ON CONFLICT (youth_id, opportunity_id) DO NOTHING
+            RETURNING id
+            """,
+            (youth_id, opportunity_id, match_score, reason_param),
+        ).fetchone()
+
+        if row is None:
+            # Lost a race with a concurrent identical request.
+            row = db.execute(
+                "SELECT id FROM opportunity_matches WHERE youth_id = ? AND opportunity_id = ?",
+                (youth_id, opportunity_id),
+            ).fetchone()
+            return str(row["id"])
+
+        match_id = row["id"]
+
+        db.execute(
+            """
+            INSERT INTO activity (event, actor_id, target_id, details)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "opportunity_matched",
+                youth_id,
+                opportunity_id,
+                json.dumps(
+                    {
+                        "match_id": str(match_id),
+                        "match_score": float(match_score),
+                    }
+                ),
+            ),
+        )
+
+    return str(match_id)
+
+
+def list_youth_matches(youth_id):
+
+    youth_id = require_uuid(youth_id, "Youth")
+
+    with transaction() as db:
+
+        rows = db.execute(
+            """
+            SELECT
+                om.id AS match_id,
+                om.youth_id,
+                om.opportunity_id,
+                om.match_score,
+                om.reason,
+                om.status,
+                om.created_at,
+                o.title,
+                o.description,
+                o.status AS opportunity_status,
+                b.name AS business_name
+            FROM opportunity_matches om
+            JOIN opportunities o
+                ON o.id = om.opportunity_id
+            LEFT JOIN businesses b
+                ON b.id = o.business_id
+            WHERE om.youth_id = ?
+            ORDER BY om.match_score DESC, om.created_at DESC
+            """,
+            (youth_id,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]

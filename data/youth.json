@@ -1,0 +1,31 @@
+[
+  {
+    "id": "Y-67efc584",
+    "name": "Todd",
+    "location": "gaborone",
+    "passion": "tech",
+    "skills": "idk",
+    "goal": "success",
+    "level": "Explorer",
+    "completed_trials": 0,
+    "revenue": 0,
+    "reputation": 0,
+    "capabilities": [],
+    "created_at": "2026-08-02T11:28:31.132677Z",
+    "reputation_score": 50
+  },
+  {
+    "id": "Y-de670982",
+    "name": "todd",
+    "location": "Gaborone",
+    "passion": "tech",
+    "skills": "programing and sales agent",
+    "goal": "building an ecosystem",
+    "level": "Explorer",
+    "completed_trials": 0,
+    "revenue": 0,
+    "reputation": 0,
+    "capabilities": [],
+    "created_at": "2026-08-07T06:49:12.342708Z"
+  }
+]

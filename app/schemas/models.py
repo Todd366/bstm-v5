@@ -1,0 +1,113 @@
+"""Request bodies. Length limits here are the first line of defence; the
+service layer re-validates everything (it is also called from tests and
+scripts, not just HTTP)."""
+
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class CapabilityClaim(BaseModel):
+    capability_id: str = Field(..., max_length=64)
+    level: str = Field("Beginner", max_length=20)
+
+
+class YouthCreate(BaseModel):
+    name: str = Field(..., max_length=120)
+    location: str = Field(..., max_length=120)
+    goal: str = Field(..., max_length=200)
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+    passion: Optional[str] = Field(None, max_length=300)
+    availability: Optional[str] = Field(None, max_length=100)
+    equipment: Optional[str] = Field(None, max_length=300)
+    intake: Optional[dict] = None
+    capabilities: Optional[List[CapabilityClaim]] = None
+
+
+class YouthLogin(BaseModel):
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+
+
+class BusinessCreate(BaseModel):
+    name: str = Field(..., max_length=150)
+    owner: str = Field(..., max_length=120)
+    sector: str = Field(..., max_length=100)
+    location: str = Field(..., max_length=120)
+    main_problem: str = Field(..., max_length=1000)
+
+
+class AuditStatusUpdate(BaseModel):
+    status: str = Field(..., max_length=20)
+
+
+class OpportunityCreate(BaseModel):
+    business_id: str = Field(..., max_length=64)
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=4000)
+    department: Optional[str] = Field(None, max_length=100)
+    budget: float = 0
+
+
+class CapabilityCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    category: str = Field(..., max_length=60)
+    description: Optional[str] = Field(None, max_length=500)
+
+
+class CapabilityAssign(BaseModel):
+    capability_id: str = Field(..., max_length=64)
+    level: str = Field("Beginner", max_length=20)
+
+
+class CapabilityVerify(BaseModel):
+    verified: bool = True
+
+
+class EvidenceSubmit(BaseModel):
+    youth_id: str = Field(..., max_length=64)
+    kind: str = Field(..., max_length=30)
+    trial_id: Optional[str] = Field(None, max_length=64)
+    capability_id: Optional[str] = Field(None, max_length=64)
+    url: Optional[str] = Field(None, max_length=2000)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
+class MyEvidenceSubmit(BaseModel):
+    kind: str = Field(..., max_length=30)
+    trial_id: Optional[str] = Field(None, max_length=64)
+    capability_id: Optional[str] = Field(None, max_length=64)
+    url: Optional[str] = Field(None, max_length=2000)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
+class MatchCreate(BaseModel):
+    youth_id: str = Field(..., max_length=64)
+    opportunity_id: str = Field(..., max_length=64)
+    match_score: float = 0
+    reason: Optional[dict] = None
+
+
+class AssignmentCreate(BaseModel):
+    youth_id: str = Field(..., max_length=64)
+    opportunity_id: str = Field(..., max_length=64)
+    match_id: Optional[str] = Field(None, max_length=64)
+
+
+class TrialCreate(BaseModel):
+    assignment_id: str = Field(..., max_length=64)
+    title: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = Field(None, max_length=2000)
+
+
+class TrialSubmission(BaseModel):
+    submission: Optional[dict] = None
+
+
+class TrialReview(BaseModel):
+    review: Optional[dict] = None
+
+
+class TrialCancel(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)

@@ -1,0 +1,13 @@
+[project]
+name = "bstm-v5"
+version = "5.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi<0.100.0",
+    "pydantic<2.0.0",
+    "psycopg2-binary",
+    "PyJWT>=2.0.0,<3.0.0",
+]
+
+[tool.vercel]
+entrypoint = "app.main:app"
