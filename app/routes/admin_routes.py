@@ -3,6 +3,10 @@
 from fastapi import APIRouter, Query
 
 from app.api.service import (
+    get_business_diagnosis,
+    get_field_audits,
+    get_review_queue,
+    record_field_audit,
     accept_opportunity_assignment,
     assign_opportunity,
     assign_youth_capability,
@@ -43,6 +47,7 @@ from app.api.service import (
 )
 from app.routes.common import service_call
 from app.schemas.models import (
+    FieldAuditCreate,
     AssignmentCreate,
     AuditStatusUpdate,
     CapabilityAssign,
@@ -63,6 +68,26 @@ router = APIRouter(tags=["admin"])
 @router.get("/admin/stats")
 def stats():
     return service_call(get_dashboard)
+
+
+@router.get("/admin/queue")
+def queue():
+    return service_call(get_review_queue)
+
+
+@router.post("/audits", status_code=201)
+def audit_create(payload: FieldAuditCreate):
+    return service_call(record_field_audit, payload.dict())
+
+
+@router.get("/audits")
+def audit_list(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    return service_call(get_field_audits, limit, offset)
+
+
+@router.get("/businesses/{business_id}/diagnosis")
+def business_diagnosis(business_id: str):
+    return service_call(get_business_diagnosis, business_id)
 
 
 # ----- youth -----

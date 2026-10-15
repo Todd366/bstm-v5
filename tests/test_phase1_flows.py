@@ -331,3 +331,68 @@ def test_applied_opportunities_leave_the_match_list(test_database):
     assert len(match_youth_to_opportunities(a)) == 1
     api.apply_to_opportunity(a, opp)
     assert match_youth_to_opportunities(a) == []
+
+
+# ---------- operations: brief, diagnosis, audits, queue ----------
+
+def test_brief_recommends_department_from_intake():
+    from app.services.brief_service import build_brief
+
+    brief = build_brief({"interests": ["Technology"], "resources": ["Smartphone", "Computer"], "availability": "Full-time"})
+    assert brief["primary"]["name"]
+    assert brief["primary"]["score"] > 0
+    assert len(brief["alternatives"]) == 3
+    assert brief["learning_path"]
+
+
+def test_brief_handles_empty_intake():
+    from app.services.brief_service import build_brief
+
+    assert build_brief(None)["primary"]["name"]
+
+
+def test_diagnosis_matches_rules_and_has_fallback():
+    from app.services.diagnosis_service import diagnose
+
+    names = {f["department"] for f in diagnose("We have no website and no records of money", "Shop")}
+    assert "Web Development" in names and "Finance & Accounting" in names
+    assert diagnose("???", "Shop")[0]["department"] == "Research & Development"
+
+
+def test_field_audit_roundtrip_and_validation(test_database):
+    from app.services import audit_service, business_service
+
+    bid = business_service.create_business("Audit Shop", "Owner", "Retail", "Mochudi", "No website")
+    aid = audit_service.create_field_audit(
+        {"business_id": bid, "business_name": "Audit Shop", "location": "Mochudi",
+         "ratings": {"Customer traffic": "G", "Bogus": "G"}, "rooms": [3, 1, 3], "score": 7}
+    )
+    rows = audit_service.list_field_audits()
+    assert str(rows[0]["id"]) == aid
+    rooms = rows[0]["rooms"]
+    if isinstance(rooms, str):  # minimal test driver returns the raw array text
+        rooms = [int(x) for x in rooms.strip("{}").split(",") if x]
+    assert rooms == [1, 3]
+    assert "Bogus" not in rows[0]["ratings"]
+    assert business_service.get_business(bid)["audit_status"] == "Completed"
+
+    for bad in ({"rooms": [64]}, {"score": 11}):
+        data = {"business_name": "X", "location": "Y", "score": 5}
+        data.update(bad)
+        try:
+            audit_service.create_field_audit(data)
+            assert False, "should reject"
+        except ValueError:
+            pass
+
+
+def test_review_queue_lists_pending_and_submitted(test_database):
+    from app.services import assignment_service, opportunity_service, queue_service, business_service
+    from tests.helpers import create_youth
+
+    yid = create_youth(name="Queue Tester")
+    bid = business_service.create_business("Queue Shop", "Owner", "Retail", "Maun", "x")
+    oid = opportunity_service.create_opportunity(bid, "Fix site", "d", None, 100)
+    assignment_service.create_assignment(yid, oid, mode="application")
+    queue = queue_service.review_queue()
+    assert len(queue["applications"]) == 1 and queue["trials"] == []

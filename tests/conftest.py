@@ -73,6 +73,7 @@ def _test_schema():
 
 _TABLES = [
     "rate_limit_events",
+    "field_audits",
     "activity",
     "evidence",
     "opportunity_matches",

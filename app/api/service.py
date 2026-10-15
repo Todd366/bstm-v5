@@ -20,7 +20,11 @@ from app.services.assignment_service import (
     list_opportunity_assignments,
     list_youth_assignments,
 )
+from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
+from app.services.brief_service import get_brief
+from app.services.diagnosis_service import diagnose, diagnose_business
+from app.services.queue_service import review_queue
 from app.services.business_service import (
     create_business,
     get_business,
@@ -117,7 +121,14 @@ def activate_business(data):
         main_problem=data["main_problem"],
     )
 
-    return {"status": "created", "id": business_id}
+    return {
+        "status": "created",
+        "id": business_id,
+        "diagnosis": [
+            {"title": f["title"], "department": f["department"]}
+            for f in diagnose(data["main_problem"], data["name"])
+        ],
+    }
 
 
 def get_capability_catalog(category=None):
@@ -132,6 +143,10 @@ def get_department_list():
 
 def get_my_profile(youth_id):
     return get_youth(youth_id)
+
+
+def get_my_brief(youth_id):
+    return get_brief(youth_id)
 
 
 def get_my_capabilities(youth_id):
@@ -470,3 +485,21 @@ def list_youth_evidence_records(youth_id):
 
 def list_trial_evidence_records(trial_id):
     return list_trial_evidence(trial_id)
+
+
+# ---------- operations (admin) ----------
+
+def get_review_queue():
+    return review_queue()
+
+
+def get_business_diagnosis(business_id):
+    return diagnose_business(business_id)
+
+
+def record_field_audit(data):
+    return {"status": "recorded", "id": create_field_audit(data)}
+
+
+def get_field_audits(limit=50, offset=0):
+    return list_field_audits(limit, offset)

@@ -1,0 +1,36 @@
+"""Department catalogue with the metadata used to recommend a department
+to a youth (category, interest tags, resource need, first entry task).
+Names must equal app.core.departments.DEPARTMENTS."""
+
+CATALOG = [
+    {"id": 'ai-ml', "name": 'AI & Machine Learning', "category": 'Technology', "tags": ['technology', 'research'], "resource": 'high', "entry": 'Telegram AI bot builds'},
+    {"id": 'trading', "name": 'Trading Automation', "category": 'Technology', "tags": ['technology', 'finance'], "resource": 'medium', "entry": 'Custom MT5 indicators'},
+    {"id": 'vpn-security', "name": 'VPN & Network Security', "category": 'Technology', "tags": ['technology'], "resource": 'high', "entry": 'Privacy tooling'},
+    {"id": 'web-dev', "name": 'Web Development', "category": 'Technology', "tags": ['technology'], "resource": 'low', "entry": 'Business websites'},
+    {"id": 'mobile-dev', "name": 'Mobile Applications', "category": 'Technology', "tags": ['technology'], "resource": 'medium', "entry": 'Progressive web apps'},
+    {"id": 'system-integration', "name": 'System Integration & API', "category": 'Technology', "tags": ['technology'], "resource": 'medium', "entry": 'Connecting BSTM platforms'},
+    {"id": 'data-science', "name": 'Data Science & Analytics', "category": 'Technology', "tags": ['technology', 'research'], "resource": 'medium', "entry": 'Business dashboards'},
+    {"id": 'blockchain', "name": 'Blockchain & Cryptocurrency', "category": 'Technology', "tags": ['technology', 'finance'], "resource": 'high', "entry": 'THoBoCoin wallet work'},
+    {"id": 'design', "name": 'Graphic Design & Branding', "category": 'Creative', "tags": ['creative'], "resource": 'low', "entry": 'Logos and brand kits'},
+    {"id": 'content', "name": 'Content Creation & Copywriting', "category": 'Creative', "tags": ['creative'], "resource": 'low', "entry": 'Documentation and books'},
+    {"id": 'social-media', "name": 'Social Media Management', "category": 'Creative', "tags": ['creative', 'community'], "resource": 'low', "entry": 'Daily content for a business'},
+    {"id": 'marketing', "name": 'Digital Marketing & Advertising', "category": 'Creative', "tags": ['creative', 'community'], "resource": 'low', "entry": 'Growth campaigns'},
+    {"id": 'tutorial-center', "name": 'BSTM Tutorial Center', "category": 'Creative', "tags": ['community'], "resource": 'medium', "entry": 'Course creation'},
+    {"id": 'music', "name": 'Music', "category": 'Creative', "tags": ['creative'], "resource": 'low', "entry": 'Production and publishing'},
+    {"id": 'clothing', "name": 'BSTM Clothing Brand', "category": 'Creative', "tags": ['creative', 'trades'], "resource": 'medium', "entry": 'Merchandise design'},
+    {"id": 'security', "name": 'Private Security', "category": 'Operations', "tags": ['trades'], "resource": 'medium', "entry": 'Field security roles'},
+    {"id": 'cablink', "name": 'CabLink Transportation', "category": 'Operations', "tags": ['trades', 'business'], "resource": 'medium', "entry": 'Driving and logistics'},
+    {"id": 'finance', "name": 'Finance & Accounting', "category": 'Operations', "tags": ['finance', 'business'], "resource": 'low', "entry": 'FlowLedger bookkeeping'},
+    {"id": 'marketplace', "name": 'Marketplace & E-Commerce', "category": 'Operations', "tags": ['business', 'technology'], "resource": 'low', "entry": 'Vendor onboarding'},
+    {"id": 'hr', "name": 'Human Resources & Talent Development', "category": 'Operations', "tags": ['business', 'community'], "resource": 'low', "entry": 'Recruitment support'},
+    {"id": 'pmo', "name": 'Project Management Office', "category": 'Operations', "tags": ['business'], "resource": 'low', "entry": '100 Trials coordination'},
+    {"id": 'legal', "name": 'Legal & Compliance', "category": 'Operations', "tags": ['business', 'research'], "resource": 'medium', "entry": 'Documentation and policy'},
+    {"id": 'rnd', "name": 'Research & Development', "category": 'Research', "tags": ['research', 'technology'], "resource": 'medium', "entry": '100 Trials field research'},
+    {"id": 'healthcare', "name": 'Healthcare Information & Wellness', "category": 'Research', "tags": ['research', 'community'], "resource": 'high', "entry": 'Health information systems'},
+    {"id": 'nutrition', "name": 'Nutrition & Health Products', "category": 'Research', "tags": ['research', 'trades'], "resource": 'medium', "entry": 'Product development'},
+    {"id": 'gin', "name": 'G.I.N - Global Intelligence Network', "category": 'Research', "tags": ['research'], "resource": 'medium', "entry": 'Knowledge network building'},
+    {"id": 'spiritual', "name": 'Spiritual Guidance & Consciousness', "category": 'Research', "tags": ['community', 'research'], "resource": 'low', "entry": 'Personal growth content'},
+    {"id": 'farming', "name": 'Micro Farming & Urban Agriculture', "category": 'Agriculture', "tags": ['agriculture', 'trades'], "resource": 'medium', "entry": 'Urban farming pilots'},
+    {"id": 'sustainability', "name": 'Sustainability & Environment', "category": 'Agriculture', "tags": ['agriculture', 'research'], "resource": 'medium', "entry": 'GreenCycle projects'},
+    {"id": 'bhd', "name": 'BHD - Black Hole Drive', "category": 'Research', "tags": ['research', 'technology'], "resource": 'high', "entry": 'Advanced computing research'},
+]

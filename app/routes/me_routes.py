@@ -13,6 +13,7 @@ from app.api.service import (
     create_my_trial,
     decline_my_assignment,
     get_my_assignments,
+    get_my_brief,
     get_my_capabilities,
     get_my_evidence,
     get_my_matches,
@@ -37,6 +38,11 @@ router = APIRouter(prefix="/me", tags=["me"])
 @router.get("")
 def my_profile(request: Request):
     return service_call(get_my_profile, youth_id_of(request))
+
+
+@router.get("/brief")
+def brief(request: Request):
+    return service_call(get_my_brief, youth_id_of(request))
 
 
 @router.get("/capabilities")

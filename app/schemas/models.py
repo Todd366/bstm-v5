@@ -111,3 +111,13 @@ class TrialReview(BaseModel):
 
 class TrialCancel(BaseModel):
     reason: Optional[str] = Field(None, max_length=500)
+
+
+class FieldAuditCreate(BaseModel):
+    business_id: Optional[str] = Field(None, max_length=64)
+    business_name: str = Field(..., max_length=150)
+    location: str = Field(..., max_length=120)
+    ratings: Optional[dict] = None
+    rooms: Optional[List[int]] = None
+    insight: Optional[str] = Field(None, max_length=1000)
+    score: int = 5
