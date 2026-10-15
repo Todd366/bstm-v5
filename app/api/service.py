@@ -24,7 +24,9 @@ from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
 from app.services.brief_service import get_brief
 from app.services.diagnosis_service import diagnose, diagnose_business
-from app.services.queue_service import review_queue
+from app.services.matching_service import candidates_for_opportunity
+from app.services.opportunity_service import close_opportunity
+from app.services.queue_service import recent_activity, review_queue
 from app.services.business_service import (
     create_business,
     get_business,
@@ -503,3 +505,15 @@ def record_field_audit(data):
 
 def get_field_audits(limit=50, offset=0):
     return list_field_audits(limit, offset)
+
+
+def get_opportunity_candidates(opportunity_id):
+    return candidates_for_opportunity(opportunity_id)
+
+
+def close_business_opportunity(opportunity_id):
+    return close_opportunity(opportunity_id)
+
+
+def get_activity(limit=50):
+    return recent_activity(limit)

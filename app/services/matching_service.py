@@ -322,3 +322,63 @@ def list_youth_matches(youth_id):
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def candidates_for_opportunity(opportunity_id, limit=20):
+    """Youth whose claimed skills fit this opportunity, best first.
+    Excludes youth who already applied or were offered it."""
+
+    opportunity_id = require_uuid(opportunity_id, "Opportunity")
+    limit = max(1, min(int(limit), 50))
+
+    with transaction() as db:
+
+        opp = db.execute(
+            """
+            SELECT o.id, o.title, o.description, o.department, b.location
+            FROM opportunities o LEFT JOIN businesses b ON b.id = o.business_id
+            WHERE o.id = ?
+            """,
+            (opportunity_id,),
+        ).fetchone()
+
+        if not opp:
+            raise ValueError("Opportunity not found")
+
+        rows = db.execute(
+            """
+            SELECT y.id AS youth_id, y.name, y.location, y.level,
+                   c.name AS capability_name, c.category AS capability_category,
+                   yc.level AS cap_level, yc.verified
+            FROM youth y
+            JOIN youth_capabilities yc ON yc.youth_id = y.id
+            JOIN capabilities c ON c.id = yc.capability_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM opportunity_assignments oa
+                WHERE oa.opportunity_id = ? AND oa.youth_id = y.id
+            )
+            """,
+            (opportunity_id,),
+        ).fetchall()
+
+    text = " ".join(p for p in (opp["description"], opp["department"]) if p)
+    best = {}
+
+    for r in rows:
+        score = calculate_match_score(
+            r["capability_name"], r["capability_category"], r["cap_level"],
+            r["verified"], opp["title"], text,
+        )
+        if score <= 0:
+            continue
+        if _same_place(r["location"], opp["location"]):
+            score = min(100, score + LOCATION_BONUS)
+        cur = best.get(r["youth_id"])
+        if cur is None or score > cur["match_score"]:
+            best[r["youth_id"]] = {
+                "youth_id": r["youth_id"], "name": r["name"], "location": r["location"],
+                "level": r["level"], "capability_name": r["capability_name"],
+                "verified": r["verified"], "match_score": score,
+            }
+
+    return sorted(best.values(), key=lambda c: -c["match_score"])[:limit]

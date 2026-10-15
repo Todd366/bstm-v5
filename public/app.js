@@ -327,7 +327,7 @@
         h("h1", { text: (S.lang === "tn" ? "Dumela, " : "Hello, ") + p.name.split(" ")[0] }),
         h("div", { class: "card" }, h("h3", { text: "Your level" }), h("p", { text: p.level || "Beginner" }),
           h("div", { class: "stat" },
-            stat(p.completed_trials, "Trials done"), stat(p.completed_opportunities, "Jobs done"), stat(Math.round(p.reputation_score || 0), "Reputation"))));
+            stat(p.completed_trials, "Trials done"), stat(p.completed_opportunities, "Jobs done"), stat(Math.round(p.reputation_score || 0), "Reputation"), stat("P" + Number(p.revenue || 0).toLocaleString("en"), "Earned"))));
       if (brief && brief.primary) node.appendChild(briefCard(brief));
       if (!ms.length && !as.length) node.appendChild(h("div", { class: "card" }, h("h3", { text: "Next step" }), h("p", { text: "Add your skills so we can match you to work." }), h("button", { class: "btn", type: "button", text: "Add skills", onclick: function () { S.tab = "skills"; route(); } })));
       if (active.length) node.appendChild(h("div", { class: "card" }, h("h3", { text: "Active work (" + active.length + ")" }), h("button", { class: "btn sm", type: "button", text: "Open my work", onclick: function () { S.tab = "work"; route(); } })));
@@ -526,8 +526,11 @@
   function safeLink(u) { return u && /^https?:\/\//i.test(u) ? h("a", { href: u, target: "_blank", rel: "noopener noreferrer nofollow", text: "Open link" }) : null; }
 
   function aQueue() {
-    return Promise.all([A("/admin/stats"), A("/admin/queue")]).then(function (r) {
-      var c = (r[0] && r[0].counts) || {}, qd = r[1] || { applications: [], trials: [] };
+    return Promise.all([A("/admin/stats"), A("/admin/queue"), A("/admin/activity?limit=15")]).then(function (r) {
+      var c = (r[0] && r[0].counts) || {}, qd = r[1] || { applications: [], trials: [] }, act = r[2] || [];
+      return Promise.all(qd.trials.map(function (t3) { return A("/trials/" + t3.trial_id + "/evidence").catch(function () { return []; }); })).then(function (evs) { return [c, qd, act, evs]; });
+    }).then(function (r) {
+      var c = r[0], qd = r[1], act = r[2], evs = r[3];
       var node = h("div", null, h("h1", { text: "Queue" }),
         h("div", { class: "card stat" }, Object.keys(c).slice(0, 4).map(function (k) { return stat(c[k], k.replace(/_/g, " ")); })),
         h("h2", { text: "Applications (" + qd.applications.length + ")" }));
@@ -541,10 +544,11 @@
       });
       node.appendChild(h("h2", { text: "Work to review (" + qd.trials.length + ")" }));
       if (!qd.trials.length) node.appendChild(empty("Nothing to review."));
-      qd.trials.forEach(function (t2) {
+      qd.trials.forEach(function (t2, idx) {
         var sub = t2.submission || {};
         var card = h("div", { class: "card" }, h("h3", { text: t2.youth_name + " — " + t2.opportunity_title }),
-          h("span", { class: "tag warn", text: t2.status }), sub.summary ? h("p", { text: sub.summary }) : null, h("p", null, safeLink(sub.link)));
+          h("span", { class: "tag warn", text: t2.status }), sub.summary ? h("p", { text: sub.summary }) : null, h("p", null, safeLink(sub.link)),
+          (evs[idx] || []).map(function (e) { return h("p", { class: "m" }, "Proof: " + e.kind + (e.notes ? " – " + e.notes : "") + " ", safeLink(e.url)); }));
         if (t2.status === "Submitted") aact(card, "Start review", "/trials/" + t2.trial_id + "/review", { review: {} }, "", "Review started.");
         else {
           var score = h("input", { type: "number", min: 0, max: 100, placeholder: "Score 0–100", inputmode: "numeric" });
@@ -557,6 +561,8 @@
         }
         node.appendChild(card);
       });
+      node.appendChild(h("h2", { text: "Recent activity" }));
+      act.forEach(function (a) { node.appendChild(h("p", { class: "m", text: when(a.created_at) + " · " + String(a.event).replace(/_/g, " ") })); });
       show(node);
     });
   }
@@ -584,7 +590,11 @@
             });
           }).catch(fail);
         });
-        card.appendChild(btn); node.appendChild(card);
+        card.appendChild(btn);
+        var st = h("select", { "aria-label": "Audit status" }, ["Pending", "InProgress", "Completed"].map(function (x) { return h("option", { value: x, text: "Audit: " + x, selected: x === b.audit_status }); }));
+        st.addEventListener("change", function () { A("/businesses/" + b.id + "/audit-status", { status: st.value }).then(function () { say("Audit status updated."); }).catch(fail); });
+        card.appendChild(h("div", { style: "margin-top:8px" }, st));
+        node.appendChild(card);
       });
       show(node);
     });
@@ -604,12 +614,32 @@
             as.forEach(function (a) {
               var row = h("div", { class: "card" }, h("p", null, h("strong", { text: a.youth_name }), " ", h("span", { class: "tag", text: a.status })), h("p", { class: "m", text: [a.youth_location, a.youth_level].filter(Boolean).join(" · ") }));
               if (a.status === "Pending") { aact(row, "Accept", "/assignments/" + a.assignment_id + "/accept", {}, "", "Accepted."); aact(row, "Decline", "/assignments/" + a.assignment_id + "/decline", {}, "sec", "Declined."); }
-              if (a.status === "Accepted") aact(row, "Mark job complete", "/assignments/" + a.assignment_id + "/complete", {}, "", "Job completed.");
+              if (a.status === "Accepted") { aact(row, "Mark job complete", "/assignments/" + a.assignment_id + "/complete", {}, "", "Job completed."); aact(row, "Cancel", "/assignments/" + a.assignment_id + "/cancel", {}, "sec", "Assignment cancelled."); }
               out.appendChild(row);
             });
           }).catch(fail);
         });
-        card.appendChild(btn); node.appendChild(card);
+        card.appendChild(btn);
+        if (o.status === "Open") {
+          var cbtn = h("button", { class: "btn sm sec", type: "button", text: "Suggested youth" });
+          cbtn.addEventListener("click", function () {
+            busy(cbtn, A("/opportunities/" + o.id + "/candidates")).then(function (cs) {
+              clear(out); if (!cs.length) out.appendChild(h("p", { class: "m", text: "No matching youth yet." }));
+              cs.forEach(function (c) {
+                var row = h("div", { class: "card" }, h("p", null, h("strong", { text: c.name }), " ", h("span", { class: "tag ok", text: "Fit " + c.match_score + "%" }), c.verified ? h("span", { class: "tag ok", text: "Verified" }) : null),
+                  h("p", { class: "m", text: [c.location, c.level, c.capability_name].filter(Boolean).join(" · ") }));
+                var offer = h("button", { class: "btn sm", type: "button", text: "Offer job" });
+                offer.addEventListener("click", function () {
+                  busy(offer, A("/assignments", { youth_id: c.youth_id, opportunity_id: o.id })).then(function () { say("Offer sent."); route(); }).catch(fail);
+                });
+                row.appendChild(offer); out.appendChild(row);
+              });
+            }).catch(fail);
+          });
+          card.appendChild(cbtn);
+          aact(card, "Close job", "/opportunities/" + o.id + "/close", {}, "sec", "Job closed.");
+        }
+        node.appendChild(card);
       });
       show(node);
     });
@@ -617,7 +647,14 @@
 
   function aYouth() {
     return A("/youth?limit=200").then(function (list) {
-      var node = h("div", null, h("h1", { text: "Youth (" + list.length + ")" }));
+      var catErr = h("p", { class: "err" });
+      var catForm = h("form", { class: "card", novalidate: true }, h("h2", { text: "Add a skill to the catalogue" }), field("Skill name", "cname", "text", { max: 100 }), field("Category", "ccat", "text", { max: 60, ph: "e.g. Trades" }), catErr, h("button", { class: "btn sm", type: "submit", text: t("Save") }));
+      catForm.addEventListener("submit", function (ev) {
+        ev.preventDefault(); catErr.textContent = "";
+        var nm = val(catForm, "cname"), ct = val(catForm, "ccat"); if (!nm || !ct) return (catErr.textContent = "Name and category are required.");
+        A("/capabilities", { name: nm, category: ct }).then(function () { S.caps = null; say("Skill added."); catForm.reset(); }).catch(function (e) { catErr.textContent = e.message; });
+      });
+      var node = h("div", null, h("h1", { text: "Youth (" + list.length + ")" }), catForm);
       list.forEach(function (y) {
         var out = h("div");
         var card = h("div", { class: "card" }, h("h3", { text: y.name }), h("p", { class: "m", text: [y.location, y.level, y.completed_trials + " trials"].join(" · ") }), out);
@@ -632,7 +669,15 @@
             });
           }).catch(fail);
         });
-        card.appendChild(btn); node.appendChild(card);
+        card.appendChild(btn);
+        var ebtn = h("button", { class: "btn sm sec", type: "button", text: "Proof" });
+        ebtn.addEventListener("click", function () {
+          busy(ebtn, A("/youth/" + y.id + "/evidence")).then(function (es) {
+            clear(out); if (!es.length) out.appendChild(h("p", { class: "m", text: "No proof submitted." }));
+            es.forEach(function (e) { out.appendChild(h("p", { class: "m" }, e.kind + (e.capability_name ? " · " + e.capability_name : "") + (e.notes ? " – " + e.notes : "") + " ", safeLink(e.url))); });
+          }).catch(fail);
+        });
+        card.appendChild(ebtn); node.appendChild(card);
       });
       show(node);
     });
@@ -688,5 +733,6 @@
   window.addEventListener("offline", function () { say("You are offline.", true); });
   window.addEventListener("online", function () { say(""); });
   document.documentElement.lang = S.lang;
+  if ("serviceWorker" in navigator) window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); });
   route();
 })();

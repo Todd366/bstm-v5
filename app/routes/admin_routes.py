@@ -3,6 +3,9 @@
 from fastapi import APIRouter, Query
 
 from app.api.service import (
+    close_business_opportunity,
+    get_activity,
+    get_opportunity_candidates,
     get_business_diagnosis,
     get_field_audits,
     get_review_queue,
@@ -73,6 +76,21 @@ def stats():
 @router.get("/admin/queue")
 def queue():
     return service_call(get_review_queue)
+
+
+@router.get("/admin/activity")
+def activity(limit: int = Query(50, ge=1, le=200)):
+    return service_call(get_activity, limit)
+
+
+@router.get("/opportunities/{opportunity_id}/candidates")
+def opportunity_candidates(opportunity_id: str):
+    return service_call(get_opportunity_candidates, opportunity_id)
+
+
+@router.post("/opportunities/{opportunity_id}/close")
+def opportunity_close(opportunity_id: str):
+    return service_call(close_business_opportunity, opportunity_id)
 
 
 @router.post("/audits", status_code=201)

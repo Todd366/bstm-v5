@@ -39,3 +39,15 @@ def review_queue():
         "applications": [dict(r) for r in applications],
         "trials": [dict(r) for r in trials],
     }
+
+
+def recent_activity(limit=50):
+    limit = max(1, min(int(limit), 200))
+
+    with transaction() as db:
+        rows = db.execute(
+            "SELECT id, event, actor_id, target_id, details, created_at FROM activity ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+    return [dict(r) for r in rows]

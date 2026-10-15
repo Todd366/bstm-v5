@@ -127,7 +127,3 @@ class ExecuteAdapter:
         cursor.execute(translated, params)
         return _CursorResult(cursor)
 
-
-def initialize_database():
-    """No-op: schema is managed by migrations, not created at startup."""
-    return True

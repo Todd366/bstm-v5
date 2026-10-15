@@ -186,29 +186,47 @@ def get_opportunity(opportunity_id):
     return dict(row)
 
 
-def set_opportunity_status(opportunity_id, status):
-    """Admin lifecycle override (Open -> Matched -> Assigned ->
-    InProgress -> Completed/Cancelled); the column has a CHECK
-    constraint enforcing these values."""
+def close_opportunity(opportunity_id):
+    """Withdraws a job nobody is working on: declines waiting applicants
+    and marks it Cancelled. Refused once someone has been accepted."""
 
     opportunity_id = require_uuid(opportunity_id, "Opportunity")
 
-    if status not in ALLOWED_STATUSES:
-        raise ValueError(f"Invalid opportunity status: {status}")
-
     with transaction() as db:
 
-        row = db.execute(
-            """
-            UPDATE opportunities
-            SET status = ?, updated_at = now()
-            WHERE id = ?
-            RETURNING id
-            """,
-            (status, opportunity_id),
+        opp = db.execute(
+            "SELECT id, status FROM opportunities WHERE id = ? FOR UPDATE",
+            (opportunity_id,),
         ).fetchone()
 
-        if not row:
+        if not opp:
             raise ValueError("Opportunity not found")
 
-    return get_opportunity(opportunity_id)
+        if opp["status"] != "Open":
+            raise ValueError("Only open jobs can be closed. Cancel the active assignment first.")
+
+        busy = db.execute(
+            """
+            SELECT 1 FROM opportunity_assignments
+            WHERE opportunity_id = ? AND status = 'Accepted'
+            """,
+            (opportunity_id,),
+        ).fetchone()
+
+        if busy:
+            raise ValueError("Someone is already working on this job.")
+
+        db.execute(
+            "UPDATE opportunity_assignments SET status = 'Declined' WHERE opportunity_id = ? AND status = 'Pending'",
+            (opportunity_id,),
+        )
+        db.execute(
+            "UPDATE opportunities SET status = 'Cancelled', updated_at = now() WHERE id = ?",
+            (opportunity_id,),
+        )
+        db.execute(
+            "INSERT INTO activity (event, actor_id, target_id, details) VALUES (?, NULL, ?, ?)",
+            ("opportunity_closed", opportunity_id, "{}"),
+        )
+
+    return {"id": opportunity_id, "status": "Cancelled"}

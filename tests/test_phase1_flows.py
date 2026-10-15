@@ -396,3 +396,41 @@ def test_review_queue_lists_pending_and_submitted(test_database):
     assignment_service.create_assignment(yid, oid, mode="application")
     queue = queue_service.review_queue()
     assert len(queue["applications"]) == 1 and queue["trials"] == []
+
+
+def test_close_opportunity_declines_applicants_and_blocks_active_jobs(test_database):
+    from app.services import assignment_service, business_service, opportunity_service
+    from tests.helpers import create_youth
+
+    bid = business_service.create_business("Close Shop", "Owner", "Retail", "Maun", "x")
+    oid = opportunity_service.create_opportunity(bid, "Close me", "d", None, 0)
+    yid = create_youth(name="Closer")
+    aid = assignment_service.create_assignment(yid, oid, mode="application")
+
+    assert opportunity_service.close_opportunity(oid)["status"] == "Cancelled"
+    assert assignment_service.get_assignment(aid)["status"] == "Declined"
+
+    oid2 = opportunity_service.create_opportunity(bid, "Busy job", "d", None, 0)
+    aid2 = assignment_service.create_assignment(yid, oid2, mode="application")
+    assignment_service.accept_assignment(aid2)
+    try:
+        opportunity_service.close_opportunity(oid2)
+        assert False, "should refuse"
+    except ValueError:
+        pass
+
+
+def test_candidates_for_opportunity_ranks_matching_youth(test_database):
+    from app.services import business_service, capability_service, matching_service, opportunity_service
+    from tests.helpers import create_youth
+
+    bid = business_service.create_business("Cand Shop", "Owner", "Retail", "Mochudi", "x")
+    oid = opportunity_service.create_opportunity(bid, "Plumbing repair", "Fix pipes", None, 0)
+    cap = capability_service.create_capability("Plumbing", "Trades")
+    cap_id = cap if isinstance(cap, str) else cap["id"]
+    good = create_youth(name="Plumber", location="Mochudi")
+    other = create_youth(name="Nobody")
+    capability_service.assign_capability_to_youth(good, cap_id, "Advanced")
+
+    names = [c["name"] for c in matching_service.candidates_for_opportunity(oid)]
+    assert names == ["Plumber"] and "Nobody" not in names

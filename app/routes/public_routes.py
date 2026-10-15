@@ -60,6 +60,11 @@ def app_css():
     return _static("app.css", "text/css", _ASSET_CACHE)
 
 
+@router.get("/sw.js")
+def service_worker():
+    return _static("sw.js", "application/javascript", _NO_CACHE)
+
+
 @router.get("/favicon.svg")
 def favicon():
     return _static("favicon.svg", "image/svg+xml", _ASSET_CACHE)

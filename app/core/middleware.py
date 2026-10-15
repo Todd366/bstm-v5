@@ -44,6 +44,7 @@ PUBLIC_PATHS = {
     "/app.css",
     "/favicon.svg",
     "/manifest.webmanifest",
+    "/sw.js",
     "/catalog/capabilities",
     "/catalog/departments",
 }
