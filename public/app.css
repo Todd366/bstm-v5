@@ -34,3 +34,5 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{out
 .err{color:var(--r);font-size:.9rem;margin-top:8px}
 .steps{display:flex;gap:6px;margin-bottom:12px}.steps span{flex:1;height:5px;border-radius:3px;background:var(--b)}.steps .on{background:var(--g)}
 .spin{text-align:center;padding:32px;color:var(--m)}
+.bn{background:var(--r);color:#fff;border-radius:9px;font-size:.7rem;padding:0 5px;margin-left:2px}.bn:empty{display:none}
+.top{gap:4px}.top strong{white-space:nowrap}.who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 80px}.link{white-space:nowrap;padding:8px 6px}

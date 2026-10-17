@@ -20,7 +20,7 @@ _OPPORTUNITY_COLUMNS = """
     o.id, o.business_id, b.name AS business_name,
     b.location AS business_location,
     o.title, o.description, o.status,
-    o.department, o.budget, o.created_at
+    o.department, o.budget, o.created_at, o.approval_status, o.created_by
 """
 
 
@@ -30,6 +30,8 @@ def create_opportunity(
     description=None,
     department=None,
     budget=0,
+    approval_status="Approved",
+    created_by="staff",
 ):
 
     business_id = require_uuid(business_id, "Business")
@@ -68,12 +70,12 @@ def create_opportunity(
             """
             INSERT INTO opportunities (
                 business_id, title, description,
-                status, department, budget
+                status, department, budget, approval_status, created_by
             )
-            VALUES (?, ?, ?, 'Open', ?, ?)
+            VALUES (?, ?, ?, 'Open', ?, ?, ?, ?)
             RETURNING id
             """,
-            (business_id, title, description, department, budget),
+            (business_id, title, description, department, budget, approval_status, created_by),
         ).fetchone()
 
         opportunity_id = row["id"]
@@ -111,13 +113,16 @@ def create_opportunity(
     return str(opportunity_id)
 
 
-def list_opportunities(limit=100, offset=0, status=None):
+def list_opportunities(limit=100, offset=0, status=None, approval=None):
 
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
 
     if status is not None and status not in ALLOWED_STATUSES:
         raise ValueError("Invalid opportunity status")
+
+    if approval is not None and approval not in ("Pending", "Approved", "Rejected"):
+        raise ValueError("Invalid approval status")
 
     with transaction() as db:
 
@@ -127,21 +132,28 @@ def list_opportunities(limit=100, offset=0, status=None):
             FROM opportunities o
             LEFT JOIN businesses b ON b.id = o.business_id
             WHERE (?::text IS NULL OR o.status = ?)
+              AND (?::text IS NULL OR o.approval_status = ?)
             ORDER BY o.created_at DESC
             LIMIT ? OFFSET ?
             """,
-            (status, status, limit, offset),
+            (status, status, approval, approval, limit, offset),
         ).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def browse_open_opportunities(youth_id, limit=50):
+def browse_open_opportunities(youth_id, limit=50, offset=0, q=None, location=None, department=None):
     """All open opportunities the youth has not applied to yet — for
     youth with few or no claimed skills, where matching returns little."""
 
     youth_id = require_uuid(youth_id, "Youth")
     limit = max(1, min(int(limit), 100))
+    offset = max(0, int(offset))
+    q = clean_text(q, "Search", 80, required=False)
+    location = clean_text(location, "Location", 120, required=False)
+    department = clean_text(department, "Department", 100, required=False)
+    like = "%" + q.replace("%", "").replace("_", "") + "%" if q else None
+    place = "%" + location.replace("%", "").replace("_", "") + "%" if location else None
 
     with transaction() as db:
 
@@ -150,15 +162,18 @@ def browse_open_opportunities(youth_id, limit=50):
             SELECT {_OPPORTUNITY_COLUMNS}
             FROM opportunities o
             LEFT JOIN businesses b ON b.id = o.business_id
-            WHERE o.status = 'Open'
+            WHERE o.status = 'Open' AND o.approval_status = 'Approved'
               AND NOT EXISTS (
                   SELECT 1 FROM opportunity_assignments oa
                   WHERE oa.opportunity_id = o.id AND oa.youth_id = ?
               )
+              AND (?::text IS NULL OR o.title ILIKE ? OR o.description ILIKE ?)
+              AND (?::text IS NULL OR b.location ILIKE ?)
+              AND (?::text IS NULL OR o.department = ?)
             ORDER BY o.created_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (youth_id, limit),
+            (youth_id, like, like, like, place, place, department, department, limit, offset),
         ).fetchall()
 
     return [dict(row) for row in rows]
@@ -230,3 +245,52 @@ def close_opportunity(opportunity_id):
         )
 
     return {"id": opportunity_id, "status": "Cancelled"}
+
+
+def set_opportunity_approval(opportunity_id, approved, note=None):
+    """Staff decision on a job a business posted. Approved jobs become
+    visible to youth; rejected ones are closed. Notifies the business."""
+
+    from app.services.notification_service import notify
+
+    opportunity_id = require_uuid(opportunity_id, "Opportunity")
+    note = clean_text(note, "Reason", 300, required=False)
+    new_status = "Approved" if approved else "Rejected"
+
+    with transaction() as db:
+
+        opp = db.execute(
+            "SELECT id, title, business_id, approval_status FROM opportunities WHERE id = ? FOR UPDATE",
+            (opportunity_id,),
+        ).fetchone()
+
+        if not opp:
+            raise ValueError("Opportunity not found")
+
+        if opp["approval_status"] != "Pending":
+            raise ValueError("This job has already been reviewed")
+
+        if approved:
+            db.execute(
+                "UPDATE opportunities SET approval_status = 'Approved', updated_at = now() WHERE id = ?",
+                (opportunity_id,),
+            )
+        else:
+            db.execute(
+                "UPDATE opportunities SET approval_status = 'Rejected', status = 'Cancelled', updated_at = now() WHERE id = ?",
+                (opportunity_id,),
+            )
+
+        db.execute(
+            "INSERT INTO activity (event, actor_id, target_id, details) VALUES (?, ?, ?, ?)",
+            ("opportunity_" + new_status.lower(), opp["business_id"], opportunity_id, json.dumps({"reason": note})),
+        )
+
+        notify(
+            db, "business", opp["business_id"], "job_" + new_status.lower(),
+            "Your job was " + new_status.lower(),
+            ('"' + opp["title"] + '" is now live for youth to apply.') if approved
+            else ('"' + opp["title"] + '" was not approved.' + ((" Reason: " + note) if note else "")),
+        )
+
+    return {"id": opportunity_id, "approval_status": new_status}

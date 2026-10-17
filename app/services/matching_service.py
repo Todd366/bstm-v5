@@ -143,7 +143,7 @@ def match_youth_to_opportunities(youth_id, limit=50):
                    o.status, o.created_at
             FROM opportunities o
             LEFT JOIN businesses b ON b.id = o.business_id
-            WHERE o.status = 'Open'
+            WHERE o.status = 'Open' AND o.approval_status = 'Approved'
               AND NOT EXISTS (
                   SELECT 1 FROM opportunity_assignments oa
                   WHERE oa.opportunity_id = o.id AND oa.youth_id = ?

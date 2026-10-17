@@ -1,8 +1,19 @@
 """Admin routes: guarded by the X-API-Key header (middleware)."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 
 from app.api.service import (
+    get_unmatched,
+    resolve_unmatched_payment,
+    staff_submit_payment,
+    confirm_payment,
+    decide_opportunity,
+    fail_payout,
+    get_invoices,
+    get_payments,
+    get_payouts,
+    pay_out,
+    reject_payment,
     close_business_opportunity,
     get_activity,
     get_opportunity_candidates,
@@ -50,6 +61,11 @@ from app.api.service import (
 )
 from app.routes.common import service_call
 from app.schemas.models import (
+    ApprovalDecision,
+    PaymentReject,
+    PaymentSubmit,
+    PayoutPaid,
+    ResolveUnmatched,
     FieldAuditCreate,
     AssignmentCreate,
     AuditStatusUpdate,
@@ -203,8 +219,9 @@ def opportunity_list(
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
     status: str = Query(None, max_length=20),
+    approval: str = Query(None, max_length=20),
 ):
-    return service_call(list_business_opportunities, limit, offset, status)
+    return service_call(list_business_opportunities, limit, offset, status, approval)
 
 
 @router.get("/opportunities/{opportunity_id}")
@@ -306,3 +323,74 @@ def trial_evidence(trial_id: str):
 @router.post("/evidence", status_code=201)
 def evidence_submit(payload: EvidenceSubmit):
     return service_call(submit_youth_evidence, payload.dict())
+
+
+# ----- approvals and finance -----
+
+@router.post("/opportunities/{opportunity_id}/approval")
+def opportunity_approval(opportunity_id: str, payload: ApprovalDecision):
+    return service_call(decide_opportunity, opportunity_id, payload.dict())
+
+
+@router.get("/invoices")
+def invoice_list(
+    status: str = Query(None, max_length=20),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return service_call(get_invoices, status, limit, offset)
+
+
+@router.get("/payments")
+def payment_list(
+    status: str = Query(None, max_length=20),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return service_call(get_payments, status, limit, offset)
+
+
+@router.post("/payments/{payment_id}/confirm")
+def payment_confirm(payment_id: str):
+    return service_call(confirm_payment, payment_id)
+
+
+@router.post("/payments/{payment_id}/reject")
+def payment_reject(payment_id: str, payload: PaymentReject):
+    return service_call(reject_payment, payment_id, payload.dict())
+
+
+@router.get("/payouts")
+def payout_list(
+    status: str = Query(None, max_length=20),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return service_call(get_payouts, status, limit, offset)
+
+
+@router.post("/payouts/{payout_id}/paid")
+def payout_paid(payout_id: str, payload: PayoutPaid):
+    return service_call(pay_out, payout_id, payload.dict())
+
+
+@router.post("/payouts/{payout_id}/fail")
+def payout_fail(payout_id: str, payload: PaymentReject):
+    return service_call(fail_payout, payout_id, payload.dict())
+
+
+@router.post("/invoices/{invoice_id}/payments", status_code=201)
+def invoice_payment(invoice_id: str, payload: PaymentSubmit,
+                    idempotency_key: str = Header(None, alias="Idempotency-Key")):
+    """Staff record a payment received outside the app (cash, EFT)."""
+    return service_call(staff_submit_payment, invoice_id, payload.dict(), idempotency_key)
+
+
+@router.get("/unmatched-payments")
+def unmatched_list(status: str = Query("Open", max_length=20)):
+    return service_call(get_unmatched, status)
+
+
+@router.post("/unmatched-payments/{unmatched_id}/resolve")
+def unmatched_resolve(unmatched_id: str, payload: ResolveUnmatched):
+    return service_call(resolve_unmatched_payment, unmatched_id, payload.dict())

@@ -3,10 +3,10 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), tabs = $("tabs"), banner = $("banner");
-  var S = { atab: "queue", adminKey: null, token: null, lang: "en", tab: "home", profile: null, caps: null };
+  var S = { atab: "queue", btab: "bjobs", me: "profile", adminKey: null, token: null, btoken: null, lang: "en", tab: "home", profile: null, caps: null, depts: null };
 
   try { S.adminKey = sessionStorage.getItem("bstm_admin"); } catch (e) {}
-  try { S.token = localStorage.getItem("bstm_token"); S.lang = localStorage.getItem("bstm_lang") || "en"; } catch (e) {}
+  try { S.token = localStorage.getItem("bstm_token"); S.btoken = localStorage.getItem("bstm_btoken"); S.lang = localStorage.getItem("bstm_lang") || "en"; } catch (e) {}
   function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 
   // ---------- language ----------
@@ -15,7 +15,9 @@
     "Log in": "Tsena", "Log out": "Tswa", "Create account": "Ikwadisa", "Email": "Imeile", "Password": "Password",
     "Next": "Latelang", "Back": "Boela morago", "Name": "Leina", "Apply": "Kopa tiro", "Accept": "Amogela",
     "Decline": "Gana", "Withdraw": "Ikgogele morago", "Submit": "Romela", "Save": "Boloka",
-    "Where do you live?": "O nna kae?", "Loading…": "Go a tsenngwa…", "Setswana": "English"
+    "Where do you live?": "O nna kae?", "Loading…": "Go a tsenngwa…", "Setswana": "English",
+    "Money": "Madi", "Me": "Nna", "Alerts": "Dikitsiso", "Profile": "Porofaele", "Post a job": "Rekisa tiro", "Invoices": "Dikgetsi",
+    "Search": "Batla", "Show more": "Bontsha tse dingwe", "Log in as business": "Tsena jaaka kgwebo"
   };
   function t(s) { return S.lang === "tn" && TS[s] ? TS[s] : s; }
 
@@ -53,8 +55,10 @@
     opt = opt || {};
     var headers = { Accept: "application/json" };
     if (opt.body) headers["Content-Type"] = "application/json";
+    if (opt.headers) for (var hk in opt.headers) headers[hk] = opt.headers[hk];
+    var tok = path.indexOf("/biz") === 0 ? S.btoken : S.token;
     if (opt.admin) headers["X-API-Key"] = S.adminKey;
-    else if (S.token && !opt.anon) headers.Authorization = "Bearer " + S.token;
+    else if (tok && !opt.anon) headers.Authorization = "Bearer " + tok;
     var ctl = typeof AbortController === "function" ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
     return fetch(path, {
@@ -78,6 +82,7 @@
   }
   function fail(e) {
     if (S.adminKey && e && (e.status === 401 || e.status === 403)) { adminLogout(); say("Staff key was not accepted.", true); return; }
+    if (e && e.status === 401 && S.btoken && !S.token) { logout(true); return; }
     if (e && e.status === 401 && S.token) { logout(true); return; }
     say(e && e.message || "Something went wrong.", true);
   }
@@ -88,11 +93,28 @@
 
   // ---------- session ----------
   function logout(expired) {
-    S.token = null; S.profile = null; store("bstm_token", null);
+    S.token = null; S.btoken = null; S.profile = null; store("bstm_token", null); store("bstm_btoken", null); bell(0);
     if (expired) say("Your session ended. Please log in again.", true);
     route();
   }
-  function setToken(tok) { S.token = tok; store("bstm_token", tok); }
+  function setToken(tok) { S.token = tok; S.btoken = null; store("bstm_token", tok); store("bstm_btoken", null); }
+  function setBtoken(tok) { S.btoken = tok; S.token = null; store("bstm_btoken", tok); store("bstm_token", null); }
+  function pula(n) { return "P" + (Number(n) || 0).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function idem() { try { return crypto.randomUUID(); } catch (e) { return Date.now() + "-" + Math.random().toString(36).slice(2); } }
+  function bell(n) { var b = $("bellBtn"); if (!b) return; b.hidden = !(S.token || S.btoken); $("bellN").textContent = n > 0 ? String(n > 9 ? "9+" : n) : ""; }
+  function refreshBell() {
+    if (!(S.token || S.btoken)) return bell(0);
+    api(S.btoken ? "/biz/notifications" : "/me/notifications").then(function (r) { bell(r && r.unread || 0); }, function () {});
+  }
+  function loadDepts() {
+    if (S.depts) return Promise.resolve(S.depts);
+    return api("/catalog/departments", { anon: true }).then(function (d) { S.depts = d || []; return S.depts; }, function () { return []; });
+  }
+  function subNav(cur) {
+    return h("div", { class: "chips", style: "margin-bottom:12px" }, [["profile", "Profile"], ["skills", "Skills"], ["proof", "Proof"]].map(function (x) {
+      return h("button", { class: "chip", type: "button", "aria-pressed": cur === x[0] ? "true" : "false", text: t(x[1]), onclick: function () { S.me = x[0]; route(); } });
+    }));
+  }
 
   // ---------- auth screens ----------
   function field(label, name, type, extra) {
@@ -112,7 +134,8 @@
         h("button", { class: "btn", type: "button", text: t("Log in"), onclick: loginScreen }),
         h("button", { class: "btn sec", type: "button", text: t("Create account"), onclick: registerScreen })),
       h("div", { class: "card" }, h("h2", { text: "I own a business" }), h("p", { class: "m", text: "Tell us your problem. We find skilled youth to help." }),
-        h("button", { class: "btn", type: "button", text: "Register my business", onclick: businessScreen })),
+        h("button", { class: "btn", type: "button", text: "Register my business", onclick: businessScreen }),
+        h("button", { class: "btn sec", type: "button", text: t("Log in as business"), onclick: bizLoginScreen })),
       h("div", { class: "card" }, h("h2", { text: "BSTM staff" }),
         h("button", { class: "btn sec", type: "button", text: "Staff sign in", onclick: staffLogin }))));
   }
@@ -284,13 +307,20 @@
   }
 
   // ---------- app shell ----------
-  var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["proof", "📎", "Proof"], ["skills", "⭐", "Skills"]];
-  var ATABS = [["queue", "📋", "Queue"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"]];
+  var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["money", "💰", "Money"], ["me", "👤", "Me"]];
+  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"]];
+  var BTABS = [["bjobs", "💼", "Jobs"], ["bpost", "➕", "Post a job"], ["binv", "🧾", "Invoices"]];
   function drawTabs() {
-    clear(tabs); tabs.hidden = !S.token && !S.adminKey;
+    clear(tabs); tabs.hidden = !S.token && !S.adminKey && !S.btoken;
     if (S.adminKey) {
       ATABS.forEach(function (x) {
         tabs.appendChild(h("button", { type: "button", "aria-current": S.atab === x[0] ? "page" : null, onclick: function () { S.atab = x[0]; route(); } }, h("i", { text: x[1] }), x[2]));
+      });
+      return;
+    }
+    if (S.btoken) {
+      BTABS.forEach(function (x) {
+        tabs.appendChild(h("button", { type: "button", "aria-current": S.btab === x[0] ? "page" : null, onclick: function () { S.btab = x[0]; route(); } }, h("i", { text: x[1] }), t(x[2])));
       });
       return;
     }
@@ -299,14 +329,19 @@
       tabs.appendChild(h("button", { type: "button", "aria-current": S.tab === x[0] ? "page" : null, onclick: function () { S.tab = x[0]; route(); } }, h("i", { text: x[1] }), t(x[2])));
     });
   }
-  var VIEWS = { home: homeView, jobs: jobsView, work: workView, proof: proofView, skills: skillsView };
+  var VIEWS = { home: homeView, jobs: jobsView, work: workView, money: moneyView, alerts: alertsView,
+    me: function () { return ({ profile: profileView, skills: skillsView, proof: proofView }[S.me] || profileView)(); } };
 
   function route() {
-    $("outBtn").hidden = !S.token && !S.adminKey; $("outBtn").textContent = t("Log out"); $("langBtn").textContent = t("Setswana");
+    $("outBtn").hidden = !S.token && !S.adminKey && !S.btoken; $("outBtn").textContent = t("Log out"); $("langBtn").textContent = t("Setswana");
     drawTabs();
+    var pm = /^#\/p\/([0-9a-fA-F-]{36})$/.exec(location.hash || "");
+    if (pm) return publicProfileView(pm[1]);
     if (S.adminKey) { $("who").textContent = "Staff"; $("outBtn").hidden = false; return adminRoute(); }
-    if (!S.token) { $("who").textContent = ""; return landing(); }
+    if (S.btoken) { $("who").textContent = ""; bell(0); refreshBell(); return bizRoute(); }
+    if (!S.token) { $("who").textContent = ""; bell(0); return landing(); }
     show(h("div", { class: "spin", text: t("Loading…") }));
+    refreshBell();
     (VIEWS[S.tab] || homeView)().catch(function (e) {
       if (e && e.status === 401) return fail(e);
       var retry = h("button", { class: "btn", type: "button", text: "Try again", onclick: route });
@@ -327,7 +362,7 @@
         h("h1", { text: (S.lang === "tn" ? "Dumela, " : "Hello, ") + p.name.split(" ")[0] }),
         h("div", { class: "card" }, h("h3", { text: "Your level" }), h("p", { text: p.level || "Beginner" }),
           h("div", { class: "stat" },
-            stat(p.completed_trials, "Trials done"), stat(p.completed_opportunities, "Jobs done"), stat(Math.round(p.reputation_score || 0), "Reputation"), stat("P" + Number(p.revenue || 0).toLocaleString("en"), "Earned"))));
+            stat(p.completed_trials, "Trials done"), stat(p.completed_opportunities, "Jobs done"), stat(Math.round(p.reputation_score || 0), "Reputation"), stat(pula(p.revenue), "Paid to you"))));
       if (brief && brief.primary) node.appendChild(briefCard(brief));
       if (!ms.length && !as.length) node.appendChild(h("div", { class: "card" }, h("h3", { text: "Next step" }), h("p", { text: "Add your skills so we can match you to work." }), h("button", { class: "btn", type: "button", text: "Add skills", onclick: function () { S.tab = "skills"; route(); } })));
       if (active.length) node.appendChild(h("div", { class: "card" }, h("h3", { text: "Active work (" + active.length + ")" }), h("button", { class: "btn sm", type: "button", text: "Open my work", onclick: function () { S.tab = "work"; route(); } })));
@@ -361,15 +396,40 @@
     });
     card.appendChild(b); return card;
   }
-  var jobsMode = "match";
+  var jobsMode = "match", jf = { q: "", location: "", department: "" };
   function jobsView() {
-    var path = jobsMode === "match" ? "/me/opportunities" : "/me/opportunities/browse";
-    return api(path).then(function (list) {
+    var all = jobsMode === "all", PAGE = 20;
+    var qs = function (off) { return "?limit=" + PAGE + "&offset=" + off + (jf.q ? "&q=" + encodeURIComponent(jf.q) : "") + (jf.location ? "&location=" + encodeURIComponent(jf.location) : "") + (jf.department ? "&department=" + encodeURIComponent(jf.department) : ""); };
+    return Promise.all([api(all ? "/me/opportunities/browse" + qs(0) : "/me/opportunities"), all ? loadDepts() : Promise.resolve([])]).then(function (r) {
+      var list = r[0] || [], depts = r[1] || [];
       var tabsRow = h("div", { class: "chips" },
         ["match", "all"].map(function (m) { return h("button", { class: "chip", type: "button", "aria-pressed": jobsMode === m ? "true" : "false", text: m === "match" ? "Matched to me" : "All open", onclick: function () { jobsMode = m; route(); } }); }));
       var node = h("div", null, h("h1", { text: t("Jobs") }), tabsRow, h("div", { style: "height:12px" }));
-      if (!list || !list.length) node.appendChild(empty(jobsMode === "match" ? "No matches yet. Add more skills, or see all open jobs." : "No open jobs right now. Check back soon."));
-      else list.forEach(function (o) { node.appendChild(oppCard(o, jobsMode === "match")); });
+      if (all) {
+        var f = h("form", { class: "card", novalidate: true },
+          h("input", { name: "q", type: "search", placeholder: "Search jobs (e.g. plumbing, website)", maxlength: 80, "aria-label": t("Search") }),
+          h("input", { name: "location", type: "text", placeholder: "Town or village", maxlength: 120, list: "places", "aria-label": "Town or village", style: "margin-top:8px" }),
+          h("datalist", { id: "places" }, PLACES.map(function (p) { return h("option", { value: p }); })),
+          h("select", { name: "department", "aria-label": "Department", style: "margin-top:8px" }, h("option", { value: "", text: "Any department" }), depts.map(function (d) { return h("option", { value: d, text: d }); })),
+          h("button", { class: "btn sm", type: "submit", text: t("Search") }));
+        f.querySelector("[name=q]").value = jf.q; f.querySelector("[name=location]").value = jf.location; f.querySelector("[name=department]").value = jf.department;
+        f.addEventListener("submit", function (ev) { ev.preventDefault(); jf = { q: val(f, "q"), location: val(f, "location"), department: val(f, "department") }; route(); });
+        node.appendChild(f);
+      }
+      var box = h("div");
+      if (!list.length) node.appendChild(empty(all ? "No open jobs match. Try fewer words or another town." : "No matches yet. Add more skills, or see all open jobs."));
+      else list.forEach(function (o) { box.appendChild(oppCard(o, !all)); });
+      node.appendChild(box);
+      if (all && list.length === PAGE) {
+        var offset = PAGE, more = h("button", { class: "btn sec", type: "button", text: t("Show more") });
+        more.addEventListener("click", function () {
+          busy(more, api("/me/opportunities/browse" + qs(offset))).then(function (next) {
+            (next || []).forEach(function (o) { box.appendChild(oppCard(o, false)); });
+            offset += PAGE; if (!next || next.length < PAGE) more.remove();
+          }).catch(fail);
+        });
+        node.appendChild(more);
+      }
       show(node);
     });
   }
@@ -391,7 +451,16 @@
         if (a.status === "Pending" && a.opportunity_status === "Assigned") { act(t("Accept"), base + "/accept", "", "Accepted. Good luck!"); act(t("Decline"), base + "/decline", "sec", "Declined."); }
         if (a.status === "Pending" && a.opportunity_status !== "Assigned") act(t("Withdraw"), base + "/withdraw", "sec", "Application withdrawn.");
         if (a.status === "Accepted" && !a.trial_id) { act("Start work", base + "/trial", "", "Work started."); act(t("Withdraw"), base + "/withdraw", "sec", "Withdrawn."); }
-        if (a.trial_id && a.trial_status === "Active") card.appendChild(submitForm(a.trial_id));
+        if (a.trial_id && a.trial_status === "Active") {
+          card.appendChild(submitForm(a.trial_id));
+          var stop = h("button", { class: "btn sm sec", type: "button", text: "Stop this work" });
+          stop.addEventListener("click", function () {
+            if (!window.confirm("Stop this work? Stopping after you started lowers your reliability score.")) return;
+            busy(stop, api("/me/trials/" + encodeURIComponent(a.trial_id) + "/cancel", { method: "POST", body: {} })).then(function () { say("Work stopped. You can start again."); route(); }).catch(fail);
+          });
+          card.appendChild(stop);
+        }
+        if (a.status === "Completed") card.appendChild(h("p", { class: "m" }, "Done. See Money for your payout."));
         node.appendChild(card);
       });
       show(node);
@@ -436,7 +505,7 @@
         busy(f.querySelector("button"), api("/me/evidence", { body: { kind: kind.value, capability_id: cap.value || null, url: url || null, notes: notes || null } }))
           .then(function () { say("Proof saved."); route(); }).catch(fail);
       });
-      var node = h("div", null, h("h1", { text: t("Proof") }), f, h("h2", { text: "Your proof" }));
+      var node = h("div", null, subNav("proof"), h("h1", { text: t("Proof") }), f, h("h2", { text: "Your proof" }));
       if (!ev.length) node.appendChild(empty("No proof yet. Proof helps businesses trust you."));
       ev.forEach(function (e) {
         node.appendChild(h("div", { class: "card" }, h("h3", { text: KIND_LABEL[e.kind] || e.kind }),
@@ -452,7 +521,7 @@
     return Promise.all([api("/me/capabilities"), loadCaps()]).then(function (r) {
       var mine = r[0] || [], all = r[1] || [], have = {};
       mine.forEach(function (c) { have[c.capability_id] = 1; });
-      var node = h("div", null, h("h1", { text: t("Skills") }));
+      var node = h("div", null, subNav("skills"), h("h1", { text: t("Skills") }));
       if (!mine.length) node.appendChild(empty("You have not added any skills yet."));
       mine.forEach(function (c) { node.appendChild(h("div", { class: "card" }, h("h3", { text: c.capability_name }), h("span", { class: "tag", text: c.level }), c.verified ? h("span", { class: "tag ok", text: "Verified" }) : h("span", { class: "tag", text: "Not yet verified" }))); });
       var pick = {}, free = all.filter(function (c) { return !have[c.id]; });
@@ -470,28 +539,265 @@
   }
 
 
+  // ---------- money, profile, alerts (youth) ----------
+  var PAYOUT_METHODS = [["MyZaka", "MyZaka"], ["OrangeMoney", "Orange Money"], ["BankEFT", "Bank account"], ["Other", "Other"]];
+  function moneyView() {
+    return Promise.all([api("/me/earnings"), api("/me/payout-account")]).then(function (r) {
+      var e = r[0] || { totals: {}, payouts: [] }, acc = r[1], tt = e.totals || {};
+      var node = h("div", null, h("h1", { text: t("Money") }),
+        h("div", { class: "card stat" }, stat(pula(tt.awaiting_business), "Waiting for business"), stat(pula(tt.pending_payout), "Ready to send"), stat(pula(tt.paid_out), "Paid to you")),
+        h("p", { class: "m", text: "You keep 70% of each job's budget. We pay you after the business has paid us." }));
+      var err = h("p", { class: "err", role: "alert" });
+      var method = h("select", { name: "method", "aria-label": "How do you want to be paid?" }, PAYOUT_METHODS.map(function (m) { return h("option", { value: m[0], text: m[1], selected: acc && acc.method === m[0] }); }));
+      var f = h("form", { class: "card", novalidate: true }, h("h2", { text: acc ? "Where we pay you" : "Add where we should pay you" }),
+        !acc ? h("p", { class: "m", text: "Needed before we can send your money." }) : null,
+        h("label", { text: "How do you want to be paid?" }), method,
+        field("Name on the account", "account_name", "text", { max: 120, value: acc && acc.account_name }),
+        field("Phone or account number", "account_ref", "text", { max: 60, im: "numeric", value: acc && acc.account_ref }), err,
+        h("button", { class: "btn", type: "submit", text: t("Save") }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        var body = { method: method.value, account_name: val(f, "account_name"), account_ref: val(f, "account_ref") };
+        if (!body.account_name || body.account_ref.length < 6) return (err.textContent = "Enter the name and a phone or account number (at least 6 characters).");
+        busy(f.querySelector("button"), api("/me/payout-account", { method: "PUT", body: body })).then(function () { say("Saved."); route(); }).catch(function (x) { err.textContent = x.message; });
+      });
+      node.appendChild(f);
+      node.appendChild(h("h2", { text: "Your payouts" }));
+      if (!e.payouts.length) node.appendChild(empty("No payouts yet. They appear after a business pays for your finished job."));
+      e.payouts.forEach(function (p) {
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: pula(p.amount) + " · " + (p.opportunity_title || p.invoice_reference) }),
+          h("p", null, h("span", { class: "tag " + (p.status === "Paid" ? "ok" : "warn"), text: { Pending: "Being prepared", Paid: "Paid", Failed: "Retrying" }[p.status] || p.status })),
+          p.status === "Paid" ? h("p", { class: "m", text: "Sent to " + p.destination + " · ref " + p.provider_ref + " · " + when(p.paid_at) }) : (p.destination ? null : h("p", { class: "m", text: "Add your payout details above so we can pay you." }))));
+      });
+      show(node);
+    });
+  }
+
+  function profileView() {
+    return profile().then(function (p) {
+      var err = h("p", { class: "err", role: "alert" });
+      var pub = h("input", { type: "checkbox", id: "f_pub", name: "public_profile", style: "width:auto;min-height:0" }); pub.checked = !!p.public_profile;
+      var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Your profile" }),
+        field("Name", "name", "text", { value: p.name }),
+        h("div", null, h("label", { for: "f_bio", text: "About you (what you do, what you want)" }), h("textarea", { id: "f_bio", name: "bio", maxlength: 500 })),
+        field("Where do you live?", "location", "text", { max: 120, list: "places", value: p.location }),
+        h("datalist", { id: "places" }, PLACES.map(function (x) { return h("option", { value: x }); })),
+        field("When are you free?", "availability", "text", { max: 100, value: p.availability }),
+        field("What equipment do you have?", "equipment", "text", { max: 300, value: p.equipment }),
+        h("label", { for: "f_pub" }, pub, " Let businesses see my profile"),
+        h("p", { class: "m", text: "Public profiles show your name, town, skills and record. Never your email, money or private answers." }), err,
+        h("button", { class: "btn", type: "submit", text: t("Save") }));
+      f.querySelector("[name=bio]").value = p.bio || "";
+      f.querySelector("[name=name]").disabled = true;
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        var body = { bio: val(f, "bio") || null, location: val(f, "location"), availability: val(f, "availability") || null, equipment: val(f, "equipment") || null, passion: p.passion || null, public_profile: pub.checked };
+        if (!body.location) return (err.textContent = "Please enter where you live.");
+        busy(f.querySelector("button[type=submit]"), api("/me/profile", { method: "PUT", body: body })).then(function () { say("Profile saved."); route(); }).catch(function (x) { err.textContent = x.message; });
+      });
+      var node = h("div", null, subNav("profile"), f);
+      if (p.public_profile) {
+        var link = location.origin + "/#/p/" + p.id;
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: "Your public link" }), h("p", { class: "m", text: link }),
+          h("button", { class: "btn sm sec", type: "button", text: "Copy link", onclick: function () { try { navigator.clipboard.writeText(link).then(function () { say("Link copied."); }); } catch (x) { say("Copy the link above.", true); } } }),
+          h("button", { class: "btn sm sec", type: "button", text: "Preview", onclick: function () { location.hash = "#/p/" + p.id; } })));
+      }
+      show(node);
+    });
+  }
+
+  function publicProfileView(id) {
+    show(h("div", { class: "spin", text: t("Loading…") }));
+    api("/public/profiles/" + encodeURIComponent(id), { anon: true }).then(function (p) {
+      var skill = function (s) { return h("span", { class: "tag " + (s.verified ? "ok" : ""), text: s.name + " · " + s.level + (s.verified ? " ✓" : "") }); };
+      show(h("div", null,
+        h("div", { class: "card" }, h("h1", { text: p.name }), h("p", { class: "m", text: [p.location, p.level].filter(Boolean).join(" · ") }), p.bio ? h("p", { text: p.bio }) : null,
+          h("div", { class: "stat" }, stat(p.completed_jobs, "Jobs done"), stat(p.completed_trials, "Work approved"))),
+        h("div", { class: "card" }, h("h2", { text: "Verified skills" }), p.verified_skills.length ? h("p", null, p.verified_skills.map(skill)) : h("p", { class: "m", text: "None verified yet." }),
+          h("h2", { text: "Claimed skills" }), p.declared_skills.length ? h("p", null, p.declared_skills.map(skill)) : h("p", { class: "m", text: "None." })),
+        h("p", { class: "m", text: "✓ means BSTM checked it. Claimed skills are the person's own words." }),
+        h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: function () { location.hash = ""; route(); } })));
+    }).catch(function () {
+      show(h("div", { class: "card empty" }, h("p", { text: "This profile is private or does not exist." }), h("button", { class: "btn", type: "button", text: t("Back"), onclick: function () { location.hash = ""; route(); } })));
+    });
+  }
+
+  function alertsView() {
+    var biz = !!S.btoken, base = biz ? "/biz" : "/me";
+    return api(base + "/notifications").then(function (r) {
+      var node = h("div", null, h("h1", { text: t("Alerts") }));
+      if (!r.items.length) node.appendChild(empty("Nothing new. We will tell you here when something happens."));
+      r.items.forEach(function (n) {
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: n.title }), n.body ? h("p", { text: n.body }) : null,
+          h("p", { class: "m" }, when(n.created_at), n.read_at ? "" : " · ", n.read_at ? null : h("span", { class: "tag warn", text: "New" }))));
+      });
+      show(node);
+      if (r.unread) api(base + "/notifications/read", { method: "POST", body: {} }).then(function () { bell(0); }, function () {});
+    });
+  }
+
   // ---------- business door ----------
   var SECTORS = ["Retail", "Food & catering", "Farming", "Transport", "Construction", "Beauty & salon", "Education", "Health", "Technology", "Manufacturing", "Other"];
   function businessScreen() {
-    var err = h("p", { class: "err", role: "alert" });
+    var err = h("p", { class: "err", role: "alert" }), staff = !!S.adminKey;
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Register your business" }),
       field("Business name", "name", "text", { max: 150 }), field("Owner name", "owner", "text", { max: 120 }),
       h("div", null, h("label", { for: "f_sector", text: "Sector" }), h("select", { id: "f_sector", name: "sector" }, SECTORS.map(function (x) { return h("option", { value: x, text: x }); }))),
       field("Where is it? (town or village)", "location", "text", { max: 120, list: "places" }),
       h("datalist", { id: "places" }, PLACES.map(function (p) { return h("option", { value: p }); })),
       h("div", null, h("label", { for: "f_problem", text: "What is your biggest problem?" }), h("textarea", { id: "f_problem", name: "main_problem", maxlength: 1000 })),
-      err, h("button", { class: "btn", type: "submit", text: "Get help" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
+      h("h2", { text: staff ? "Account (optional)" : "Your account" }),
+      field("Phone", "phone", "tel", { ac: "tel", max: 30, im: "tel" }),
+      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }),
+      field("Password", "password", "password", { ac: "new-password", max: 128 }),
+      h("p", { class: "m", text: staff ? "Leave email and password empty to register the business without an account." : "You will use your email and password to post jobs, hire, and pay. At least 8 characters." }),
+      err, h("button", { class: "btn", type: "submit", text: staff ? "Register" : "Get help" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: staff ? route : landing }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";
       var body = { name: val(f, "name"), owner: val(f, "owner"), sector: val(f, "sector"), location: val(f, "location"), main_problem: val(f, "main_problem") };
-      if (!body.name || !body.owner || !body.location || !body.main_problem) return (err.textContent = "Please fill in every field.");
+      var email = val(f, "email"), pw = f.querySelector("[name=password]").value, phone = val(f, "phone");
+      if (!body.name || !body.owner || !body.location || !body.main_problem) return (err.textContent = "Please fill in the business details.");
+      if (phone) body.phone = phone;
+      if (email || pw || !staff) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return (err.textContent = "Enter a valid email address.");
+        if (pw.length < 8) return (err.textContent = "Password must be at least 8 characters.");
+        body.email = email; body.password = pw;
+      }
       busy(f.querySelector("button[type=submit]"), api("/businesses", { anon: true, body: body })).then(function (r) {
-        show(h("div", null, h("div", { class: "card" }, h("h1", { text: "Thank you, " + body.name }), h("p", { text: "We received your business. A BSTM team member will visit or call you. Here is where we think youth can help:" })),
-          (r.diagnosis || []).map(function (d) { return h("div", { class: "card" }, h("h3", { text: d.title }), h("p", { class: "m", text: "BSTM department: " + d.department })); }),
-          h("button", { class: "btn", type: "button", text: "Done", onclick: landing })));
+        var diag = (r.diagnosis || []).map(function (d) { return h("div", { class: "card" }, h("h3", { text: d.title }), h("p", { class: "m", text: "BSTM department: " + d.department })); });
+        var done = function () { if (r.access_token && !staff) { setBtoken(r.access_token); S.btab = "bjobs"; route(); } else route(); };
+        show(h("div", null, h("div", { class: "card" }, h("h1", { text: "Thank you, " + body.name }),
+          h("p", { text: r.access_token ? "Your account is ready. Here is where we think youth can help:" : "The business is registered. Here is where youth can help:" })), diag,
+          h("button", { class: "btn", type: "button", text: r.access_token && !staff ? "Go to my jobs" : "Done", onclick: done })));
       }).catch(function (e) { err.textContent = e.message; });
     });
     show(f);
+  }
+
+  function bizLoginScreen() {
+    var err = h("p", { class: "err", role: "alert" });
+    var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Log in as business") }),
+      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), err,
+      h("button", { class: "btn", type: "submit", text: t("Log in") }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      busy(f.querySelector("button[type=submit]"), api("/businesses/login", { anon: true, body: { email: val(f, "email"), password: f.querySelector("[name=password]").value } }))
+        .then(function (r) { setBtoken(r.access_token); S.btab = "bjobs"; route(); }).catch(function (e) { err.textContent = e.message; });
+    });
+    show(f);
+  }
+
+  // ---------- business portal ----------
+  function bizRoute() {
+    show(h("div", { class: "spin", text: t("Loading…") }));
+    ({ bjobs: bJobs, bpost: bPost, binv: bInvoices, alerts: alertsView }[S.btab] || bJobs)().catch(function (e) {
+      if (e && e.status === 401) return fail(e);
+      show(h("div", { class: "card empty" }, h("p", { text: e.message || "Could not load." }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
+    });
+  }
+  function bAct(card, label, path, body, cls, ok) {
+    var b = h("button", { class: "btn sm " + (cls || ""), type: "button", text: label });
+    b.addEventListener("click", function () { busy(b, api(path, { method: "POST", body: body || {} })).then(function () { say(ok || "Done."); route(); }).catch(fail); });
+    card.appendChild(b);
+  }
+  var APPROVAL_TAG = { Pending: ["warn", "Waiting for BSTM approval"], Approved: ["ok", "Live"], Rejected: ["", "Not approved"] };
+  function bJobs() {
+    return Promise.all([api("/biz"), api("/biz/opportunities")]).then(function (r) {
+      var me = r[0], list = r[1] || [];
+      var node = h("div", null, h("h1", { text: me.name }), h("p", { class: "m", text: "Your jobs" }));
+      if (!list.length) node.appendChild(empty("No jobs yet. Tap “Post a job” to ask for help."));
+      list.forEach(function (o) {
+        var out = h("div"), tag = APPROVAL_TAG[o.approval_status] || ["", o.approval_status];
+        var card = h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.department, money(o.budget)].filter(Boolean).join(" · ") }),
+          h("p", null, h("span", { class: "tag " + tag[0], text: tag[1] }), o.approval_status === "Approved" ? h("span", { class: "tag", text: o.status }) : null, h("span", { class: "tag", text: o.people + " people" })), out);
+        var show1 = h("button", { class: "btn sm sec", type: "button", text: "People on this job" });
+        show1.addEventListener("click", function () { busy(show1, loadPeople(o, out)).catch(fail); });
+        card.appendChild(show1);
+        if (o.status === "Open") bAct(card, "Close job", "/biz/opportunities/" + o.id + "/close", {}, "sec", "Job closed.");
+        node.appendChild(card);
+      });
+      show(node);
+    });
+  }
+  function loadPeople(o, out) {
+    return api("/biz/opportunities/" + encodeURIComponent(o.id) + "/people").then(function (people) {
+      clear(out); if (!people.length) out.appendChild(h("p", { class: "m", text: "Nobody yet." }));
+      people.forEach(function (p) {
+        var row = h("div", { class: "card" }, h("p", null, h("strong", { text: p.name }), " ", h("span", { class: "tag", text: p.status })),
+          h("p", { class: "m", text: [p.location, p.level, p.verified_skills + " verified skills"].join(" · ") }));
+        if (p.status === "Pending" && p.opportunity_status === "Open") {
+          bAct(row, "Choose this person", "/biz/assignments/" + p.assignment_id + "/accept", {}, "", "Chosen. They have been told.");
+          bAct(row, "Not this one", "/biz/assignments/" + p.assignment_id + "/decline", {}, "sec", "Declined.");
+        }
+        if (p.trial_status === "Submitted" || p.trial_status === "Under Review") {
+          var sub = p.submission || {};
+          row.appendChild(h("p", null, h("strong", { text: "Work submitted: " }), sub.summary || ""));
+          row.appendChild(h("p", null, safeLink(sub.link)));
+          var score = h("input", { type: "number", min: 0, max: 100, placeholder: "Score 0–100", inputmode: "numeric", "aria-label": "Score" });
+          var ok = h("button", { class: "btn sm", type: "button", text: "Approve work" });
+          ok.addEventListener("click", function () {
+            var n = Number(score.value); if (score.value === "" || !(n >= 0 && n <= 100)) return say("Enter a score from 0 to 100.", true);
+            if (!window.confirm("Approve this work? We will send you an invoice.")) return;
+            busy(ok, api("/biz/trials/" + encodeURIComponent(p.trial_id) + "/approve", { method: "POST", body: { score: n } })).then(function () { say("Approved. Your invoice is ready."); route(); }).catch(fail);
+          });
+          row.appendChild(score); row.appendChild(ok);
+        } else if (p.trial_status === "Active") row.appendChild(h("p", { class: "m", text: "Working on it now." }));
+        if (p.status === "Completed") row.appendChild(h("p", { class: "m", text: "Finished. Check Invoices." }));
+        out.appendChild(row);
+      });
+    });
+  }
+  function bPost() {
+    return loadDepts().then(function (depts) {
+      var err = h("p", { class: "err", role: "alert" });
+      var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Post a job") }),
+        field("What do you need done?", "title", "text", { max: 200, ph: "e.g. Make a poster for my shop" }),
+        h("div", null, h("label", { for: "f_desc", text: "Details" }), h("textarea", { id: "f_desc", name: "description", maxlength: 4000, placeholder: "What exactly? By when? Where?" })),
+        h("div", null, h("label", { for: "f_dept", text: "Type of help" }), h("select", { id: "f_dept", name: "department" }, h("option", { value: "", text: "Not sure" }), depts.map(function (d) { return h("option", { value: d, text: d }); }))),
+        field("Budget (Pula)", "budget", "number", { im: "numeric", ph: "0 if free" }),
+        h("p", { class: "m", text: "BSTM checks every job before youth see it. You pay after the work is approved; the youth gets 70%." }), err,
+        h("button", { class: "btn", type: "submit", text: t("Submit") }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        var body = { title: val(f, "title"), description: val(f, "description") || null, department: val(f, "department") || null, budget: Number(val(f, "budget")) || 0 };
+        if (!body.title) return (err.textContent = "Say what you need done.");
+        if (body.budget < 0) return (err.textContent = "Budget cannot be negative.");
+        busy(f.querySelector("button[type=submit]"), api("/biz/opportunities", { method: "POST", body: body })).then(function () { say("Sent. BSTM will approve it soon."); S.btab = "bjobs"; route(); }).catch(function (x) { err.textContent = x.message; });
+      });
+      show(f);
+    });
+  }
+  var PAY_METHODS = [["MyZaka", "MyZaka"], ["OrangeMoney", "Orange Money"], ["BankEFT", "Bank transfer (EFT)"], ["Cash", "Cash paid to BSTM"]];
+  function bInvoices() {
+    return Promise.all([api("/biz"), api("/biz/invoices")]).then(function (r) {
+      var me = r[0], list = r[1] || [];
+      var node = h("div", null, h("h1", { text: t("Invoices") }), h("div", { class: "card" }, h("h3", { text: "How to pay" }), h("p", { text: me.payment_instructions || "" })));
+      if (!list.length) node.appendChild(empty("No invoices yet. One appears when you approve finished work."));
+      list.forEach(function (i) {
+        var owed = Number(i.amount) - Number(i.paid_amount || 0);
+        var card = h("div", { class: "card" }, h("h3", { text: i.reference + " · " + pula(i.amount) }), h("p", { class: "m", text: (i.opportunity_title || "") + " · " + when(i.created_at) }),
+          h("p", null, h("span", { class: "tag " + (i.status === "Paid" ? "ok" : "warn"), text: i.status === "Paid" ? "Paid" : "Waiting for payment" }),
+            Number(i.pending_payments) > 0 ? h("span", { class: "tag", text: "Payment being checked" }) : null));
+        if (i.status === "Issued" && Number(i.pending_payments) === 0 && owed > 0) card.appendChild(payForm(i, owed));
+        node.appendChild(card);
+      });
+      show(node);
+    });
+  }
+  function payForm(i, owed) {
+    var key = idem(), err = h("p", { class: "err", role: "alert" });
+    var method = h("select", { name: "method", "aria-label": "Payment method" }, PAY_METHODS.map(function (m) { return h("option", { value: m[0], text: m[1] }); }));
+    var f = h("form", { novalidate: true }, h("p", { class: "m", text: "After you pay " + pula(owed) + ", tell us the reference you got:" }), method,
+      h("input", { name: "provider_ref", type: "text", maxlength: 80, placeholder: "Payment reference / receipt number", "aria-label": "Payment reference", style: "margin-top:8px" }), err,
+      h("button", { class: "btn sm", type: "submit", text: "I have paid" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      var ref = val(f, "provider_ref");
+      if (method.value !== "Cash" && ref.length < 4) return (err.textContent = "Enter the payment reference (at least 4 characters).");
+      busy(f.querySelector("button"), api("/biz/invoices/" + encodeURIComponent(i.id) + "/payments", { method: "POST", headers: { "Idempotency-Key": key }, body: { method: method.value, provider_ref: ref || null } }))
+        .then(function () { say("Thank you. We will confirm your payment."); route(); }).catch(function (x) { err.textContent = x.message; });
+    });
+    return f;
   }
 
   // ---------- staff console ----------
@@ -518,7 +824,7 @@
   }
   function adminRoute() {
     show(h("div", { class: "spin", text: t("Loading…") }));
-    ({ queue: aQueue, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit }[S.atab] || aQueue)().catch(function (e) {
+    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit }[S.atab] || aQueue)().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);
       show(h("div", { class: "card empty" }, h("p", { text: e.message }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
     });
@@ -532,8 +838,9 @@
     }).then(function (r) {
       var c = r[0], qd = r[1], act = r[2], evs = r[3];
       var node = h("div", null, h("h1", { text: "Queue" }),
-        h("div", { class: "card stat" }, Object.keys(c).slice(0, 4).map(function (k) { return stat(c[k], k.replace(/_/g, " ")); })),
-        h("h2", { text: "Applications (" + qd.applications.length + ")" }));
+        h("div", { class: "card stat" }, Object.keys(c).slice(0, 4).map(function (k) { return stat(c[k], k.replace(/_/g, " ")); })));
+      moneyQueue(node, qd);
+      node.appendChild(h("h2", { text: "Applications (" + qd.applications.length + ")" }));
       if (!qd.applications.length) node.appendChild(empty("No applications waiting."));
       qd.applications.forEach(function (a) {
         var card = h("div", { class: "card" }, h("h3", { text: a.youth_name + " → " + a.opportunity_title }),
@@ -563,6 +870,91 @@
       });
       node.appendChild(h("h2", { text: "Recent activity" }));
       act.forEach(function (a) { node.appendChild(h("p", { class: "m", text: when(a.created_at) + " · " + String(a.event).replace(/_/g, " ") })); });
+      show(node);
+    });
+  }
+
+  function noteAct(card, label, path, ph, cls, ok, field_, required) {
+    var inp = h("input", { type: "text", placeholder: ph, maxlength: 300, "aria-label": ph, style: "margin-top:8px" });
+    var b = h("button", { class: "btn sm " + (cls || ""), type: "button", text: label });
+    b.addEventListener("click", function () {
+      var v = inp.value.trim(); if (required && !v) return say(ph + " is required.", true);
+      var body = {}; body[field_] = v || null;
+      busy(b, A(path, body)).then(function () { say(ok); route(); }).catch(fail);
+    });
+    card.appendChild(inp); card.appendChild(b);
+  }
+  function moneyQueue(node, qd) {
+    var jobs = qd.jobs || [], pays = qd.payments || [], outs = qd.payouts || [], un = qd.unmatched || [];
+    if (un.length) {
+      node.appendChild(h("h2", { text: "Unmatched money (" + un.length + ")" }));
+      un.forEach(function (u) {
+        var card = h("div", { class: "card" }, h("h3", { text: (u.amount != null ? pula(u.amount) : "Amount unknown") + " · " + u.provider }),
+          h("p", { class: "m", text: "Ref " + u.provider_ref + " · invoice " + (u.invoice_reference || "?") + " · " + when(u.created_at) }), h("p", { text: u.reason }));
+        noteAct(card, "Mark resolved", "/unmatched-payments/" + u.id + "/resolve", "What was done (refund, matched by hand…)", "", "Resolved.", "resolution", true);
+        node.appendChild(card);
+      });
+    }
+    node.appendChild(h("h2", { text: "Payments to confirm (" + pays.length + ")" }));
+    if (!pays.length) node.appendChild(empty("No payments waiting."));
+    pays.forEach(function (p) {
+      var card = h("div", { class: "card" }, h("h3", { text: pula(p.amount) + " · " + p.business_name }),
+        h("p", { class: "m", text: p.invoice_reference + " · " + p.method + " · ref " + (p.provider_ref || "none") + " · " + when(p.created_at) }),
+        h("p", { class: "m", text: "Check this money is in the account before you confirm." }));
+      aact(card, "Money received", "/payments/" + p.payment_id + "/confirm", {}, "", "Payment confirmed.");
+      noteAct(card, "Not received", "/payments/" + p.payment_id + "/reject", "Reason (shown to the business)", "sec", "Payment rejected.", "note", false);
+      node.appendChild(card);
+    });
+    node.appendChild(h("h2", { text: "Payouts to send (" + outs.length + ")" }));
+    if (!outs.length) node.appendChild(empty("No payouts waiting."));
+    outs.forEach(function (o) {
+      var card = h("div", { class: "card" }, h("h3", { text: pula(o.amount) + " → " + o.youth_name }),
+        h("p", { class: "m", text: o.invoice_reference + " · " + (o.destination ? (o.method || "") + " " + o.destination : "no payout details yet") }));
+      if (o.destination) noteAct(card, "Mark as paid", "/payouts/" + o.payout_id + "/paid", "Reference from your MyZaka / bank receipt", "", "Payout recorded.", "provider_ref", true);
+      else card.appendChild(h("p", { class: "m", text: "The youth must add payout details first (they have been told)." }));
+      noteAct(card, "Failed", "/payouts/" + o.payout_id + "/fail", "Why it failed", "sec", "Marked failed; a new payout was queued.", "note", false);
+      node.appendChild(card);
+    });
+    node.appendChild(h("h2", { text: "Jobs to approve (" + jobs.length + ")" }));
+    if (!jobs.length) node.appendChild(empty("No jobs waiting for approval."));
+    jobs.forEach(function (j) { node.appendChild(approvalCard(j, j.opportunity_id)); });
+  }
+  function approvalCard(j, id) {
+    var card = h("div", { class: "card" }, h("h3", { text: j.title }), h("p", { class: "m", text: [j.business_name, j.business_location, j.department, money(j.budget)].filter(Boolean).join(" · ") }),
+      j.description ? h("p", { text: j.description }) : null);
+    var ok = h("button", { class: "btn sm", type: "button", text: "Approve" });
+    ok.addEventListener("click", function () { busy(ok, A("/opportunities/" + id + "/approval", { approved: true })).then(function () { say("Job is live."); route(); }).catch(fail); });
+    card.appendChild(ok);
+    var inp = h("input", { type: "text", placeholder: "Reason for the business", maxlength: 300, "aria-label": "Reason", style: "margin-top:8px" });
+    var no = h("button", { class: "btn sm sec", type: "button", text: "Reject" });
+    no.addEventListener("click", function () { busy(no, A("/opportunities/" + id + "/approval", { approved: false, note: inp.value.trim() || null })).then(function () { say("Job rejected."); route(); }).catch(fail); });
+    card.appendChild(inp); card.appendChild(no);
+    return card;
+  }
+
+  function aMoney() {
+    return A("/invoices?limit=100").then(function (list) {
+      var node = h("div", null, h("h1", { text: "Money" }));
+      var total = list.reduce(function (a, i) { return a + Number(i.amount); }, 0), paid = list.filter(function (i) { return i.status === "Paid"; }).reduce(function (a, i) { return a + Number(i.amount); }, 0);
+      node.appendChild(h("div", { class: "card stat" }, stat(list.length, "Invoices"), stat(pula(total), "Billed"), stat(pula(paid), "Paid in")));
+      if (!list.length) node.appendChild(empty("No invoices yet. They appear when approved work completes a paid job."));
+      list.forEach(function (i) {
+        var card = h("div", { class: "card" }, h("h3", { text: i.reference + " · " + pula(i.amount) + " · " + i.business_name }),
+          h("p", { class: "m", text: (i.opportunity_title || "") + " · youth " + pula(i.youth_share) + " / BSTM " + pula(i.platform_share) + " · " + when(i.created_at) }),
+          h("p", null, h("span", { class: "tag " + (i.status === "Paid" ? "ok" : "warn"), text: i.status }), Number(i.paid_amount) > 0 ? h("span", { class: "tag", text: pula(i.paid_amount) + " confirmed" }) : null,
+            Number(i.pending_payments) > 0 ? h("span", { class: "tag warn", text: i.pending_payments + " to confirm" }) : null));
+        if (i.status === "Issued" && Number(i.pending_payments) === 0) {
+          var key = idem(), ref = h("input", { type: "text", placeholder: "Receipt / reference (optional for cash)", maxlength: 80, "aria-label": "Reference", style: "margin-top:8px" });
+          var m = h("select", { "aria-label": "Method" }, PAY_METHODS.map(function (x) { return h("option", { value: x[0], text: x[1] }); }));
+          var b = h("button", { class: "btn sm sec", type: "button", text: "Record a payment" });
+          b.addEventListener("click", function () {
+            busy(b, api("/invoices/" + i.id + "/payments", { admin: true, method: "POST", headers: { "Idempotency-Key": key }, body: { method: m.value, provider_ref: ref.value.trim() || null } }))
+              .then(function () { say("Recorded. Confirm it in the Queue."); route(); }).catch(fail);
+          });
+          card.appendChild(m); card.appendChild(ref); card.appendChild(b);
+        }
+        node.appendChild(card);
+      });
       show(node);
     });
   }
@@ -602,11 +994,12 @@
 
   function aJobs() {
     return A("/opportunities?limit=200").then(function (list) {
-      var node = h("div", null, h("h1", { text: "Jobs" }));
+      var node = h("div", null, h("h1", { text: "Jobs" })), list_cards = [];
       if (!list.length) node.appendChild(empty("No jobs yet. Post one from Businesses."));
       list.forEach(function (o) {
         var out = h("div");
-        var card = h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.business_name, o.department, money(o.budget)].filter(Boolean).join(" · ") }), h("span", { class: "tag", text: o.status }), out);
+        if (o.approval_status === "Pending") { list_cards.push(approvalCard(o, o.id)); return; }
+        var card = h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.business_name, o.department, money(o.budget)].filter(Boolean).join(" · ") }), h("span", { class: "tag", text: o.status }), o.approval_status === "Rejected" ? h("span", { class: "tag", text: "Rejected" }) : null, out);
         var btn = h("button", { class: "btn sm sec", type: "button", text: "People on this job" });
         btn.addEventListener("click", function () {
           busy(btn, A("/opportunities/" + o.id + "/assignments")).then(function (as) {
@@ -639,8 +1032,9 @@
           card.appendChild(cbtn);
           aact(card, "Close job", "/opportunities/" + o.id + "/close", {}, "sec", "Job closed.");
         }
-        node.appendChild(card);
+        list_cards.push(card);
       });
+      list_cards.forEach(function (c2) { node.appendChild(c2); });
       show(node);
     });
   }
@@ -730,6 +1124,8 @@
   // ---------- boot ----------
   $("outBtn").addEventListener("click", function () { if (S.adminKey) adminLogout(); else logout(false); });
   $("langBtn").addEventListener("click", function () { S.lang = S.lang === "en" ? "tn" : "en"; store("bstm_lang", S.lang); document.documentElement.lang = S.lang; route(); });
+  $("bellBtn").addEventListener("click", function () { if (S.btoken) S.btab = "alerts"; else S.tab = "alerts"; route(); });
+  window.addEventListener("hashchange", route);
   window.addEventListener("offline", function () { say("You are offline.", true); });
   window.addEventListener("online", function () { say(""); });
   document.documentElement.lang = S.lang;

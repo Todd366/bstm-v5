@@ -15,6 +15,7 @@ import psycopg2.extras
 from app.core.errors import Conflict
 from app.core.validation import check_json_size, clean_text, require_uuid
 from app.db.database import transaction
+from app.services.notification_service import notify
 from app.services.progression_service import (
     apply_progression,
     capability_gain_for_review,
@@ -100,7 +101,7 @@ def create_trial(assignment_id, title=None, description=None, acting_youth_id=No
             raise ValueError("Only accepted assignments can create trials")
 
         existing = db.execute(
-            "SELECT id FROM trials WHERE assignment_id = ?",
+            "SELECT id FROM trials WHERE assignment_id = ? AND status <> 'Cancelled'",
             (assignment_id,),
         ).fetchone()
 
@@ -216,10 +217,27 @@ def review_trial(trial_id, review=None):
 
 
 def complete_trial(trial_id, review=None):
+    """Approves the work. Also finishes the job and issues the invoice in
+    the same transaction, so approved work can never sit un-invoiced."""
+
+    from app.services.assignment_service import complete_assignment_in_tx
 
     check_json_size(review, "Review")
 
     with transaction() as db:
+
+        # Same lock order as assignment changes: opportunity first.
+        parent = db.execute(
+            """
+            SELECT oa.opportunity_id FROM trials t
+            JOIN opportunity_assignments oa ON oa.id = t.assignment_id
+            WHERE t.id = ?
+            """,
+            (require_uuid(trial_id, "Trial"),),
+        ).fetchone()
+
+        if parent:
+            db.execute("SELECT id FROM opportunities WHERE id = ? FOR UPDATE", (parent["opportunity_id"],))
 
         trial = _get_trial_with_assignment(db, trial_id)
 
@@ -261,7 +279,12 @@ def complete_trial(trial_id, review=None):
             reliability_delta=RELIABILITY_GAIN_ON_COMPLETE,
         )
 
+        notify(db, "youth", trial["youth_id"], "trial_completed", "Your work was approved",
+               "Well done. Your trial was reviewed and completed.")
+
         _log(db, "trial_completed", trial, "Completed")
+
+        complete_assignment_in_tx(db, trial["assignment_id"])
 
     return str(trial["id"])
 

@@ -20,15 +20,20 @@ from app.services.assignment_service import (
     list_opportunity_assignments,
     list_youth_assignments,
 )
+from app.services import notification_service, payment_service
 from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
 from app.services.brief_service import get_brief
 from app.services.diagnosis_service import diagnose, diagnose_business
 from app.services.matching_service import candidates_for_opportunity
-from app.services.opportunity_service import close_opportunity
+from app.services.opportunity_service import close_opportunity, set_opportunity_approval
+from app.services.profile_service import get_public_profile, update_profile
 from app.services.queue_service import recent_activity, review_queue
 from app.services.business_service import (
+    authenticate_business,
     create_business,
+    list_own_applicants,
+    list_own_opportunities,
     get_business,
     list_businesses as list_business_records,
     set_audit_status,
@@ -121,15 +126,35 @@ def activate_business(data):
         sector=data["sector"],
         location=data["location"],
         main_problem=data["main_problem"],
+        email=data.get("email"),
+        phone=data.get("phone"),
+        password=data.get("password"),
     )
 
-    return {
+    result = {
         "status": "created",
         "id": business_id,
         "diagnosis": [
             {"title": f["title"], "department": f["department"]}
             for f in diagnose(data["main_problem"], data["name"])
         ],
+    }
+
+    if data.get("password"):
+        result["access_token"] = create_access_token(business_id, role="business")
+        result["token_type"] = "bearer"
+
+    return result
+
+
+def login_business(data):
+
+    business_id = authenticate_business(email=data["email"], password=data["password"])
+
+    return {
+        "status": "authenticated",
+        "access_token": create_access_token(business_id, role="business"),
+        "token_type": "bearer",
     }
 
 
@@ -171,8 +196,8 @@ def get_my_matches(youth_id):
     return match_youth_to_opportunities(youth_id)
 
 
-def browse_my_opportunities(youth_id):
-    return browse_open_opportunities(youth_id)
+def browse_my_opportunities(youth_id, q=None, location=None, department=None, limit=30, offset=0):
+    return browse_open_opportunities(youth_id, limit=limit, offset=offset, q=q, location=location, department=department)
 
 
 def apply_to_opportunity(youth_id, opportunity_id):
@@ -242,10 +267,20 @@ def get_my_trial(youth_id, trial_id):
 
 
 def submit_my_trial(youth_id, trial_id, submission):
-    return {
-        "status": "submitted",
-        "id": submit_trial(trial_id, submission, acting_youth_id=youth_id),
-    }
+    result = submit_trial(trial_id, submission, acting_youth_id=youth_id)
+
+    # The link they gave becomes evidence on this trial, so whoever
+    # reviews the work sees it next to the submission.
+    link = (submission or {}).get("link") if isinstance(submission, dict) else None
+    summary = (submission or {}).get("summary") if isinstance(submission, dict) else None
+
+    if link:
+        try:
+            submit_evidence(youth_id, "Portfolio", trial_id=trial_id, url=link, notes=summary)
+        except ValueError:
+            pass  # a bad link must not undo a submitted piece of work
+
+    return {"status": "submitted", "id": result}
 
 
 def cancel_my_trial(youth_id, trial_id, reason):
@@ -322,8 +357,8 @@ def create_business_opportunity(data):
     return {"status": "created", "id": opportunity_id}
 
 
-def list_business_opportunities(limit=100, offset=0, status=None):
-    return list_opportunities(limit, offset, status)
+def list_business_opportunities(limit=100, offset=0, status=None, approval=None):
+    return list_opportunities(limit, offset, status, approval)
 
 
 def get_business_opportunity(opportunity_id):
@@ -517,3 +552,181 @@ def close_business_opportunity(opportunity_id):
 
 def get_activity(limit=50):
     return recent_activity(limit)
+
+
+# ---------- youth: profile, payout account, earnings, notifications ----------
+
+def update_my_profile(youth_id, data):
+    return update_profile(youth_id, data)
+
+
+def get_my_payout_account(youth_id):
+    return payment_service.get_payout_account(youth_id) or {}
+
+
+def set_my_payout_account(youth_id, data):
+    return payment_service.set_payout_account(
+        youth_id, data["method"], data["account_name"], data["account_ref"]
+    )
+
+
+def get_my_earnings(youth_id):
+    return payment_service.youth_earnings(youth_id)
+
+
+def get_my_notifications(youth_id):
+    return notification_service.list_notifications("youth", youth_id)
+
+
+def read_my_notifications(youth_id):
+    return notification_service.mark_all_read("youth", youth_id)
+
+
+def view_public_profile(youth_id):
+    return get_public_profile(youth_id)
+
+
+# ---------- business portal (business_id always comes from the JWT) ----------
+
+MAX_PENDING_JOBS = 10
+
+
+def get_biz_profile(business_id):
+    from app.core.config import PAY_INSTRUCTIONS
+
+    return dict(get_business(business_id), payment_instructions=PAY_INSTRUCTIONS)
+
+
+def biz_accept_applicant(business_id, assignment_id):
+    from app.services.business_service import accept_applicant
+    return {"status": "accepted", "id": accept_applicant(business_id, assignment_id)}
+
+
+def biz_decline_applicant(business_id, assignment_id):
+    from app.services.business_service import decline_applicant
+    return {"status": "declined", "id": decline_applicant(business_id, assignment_id)}
+
+
+def biz_close_job(business_id, opportunity_id):
+    from app.services.business_service import close_own_job
+    return close_own_job(business_id, opportunity_id)
+
+
+def biz_approve_work(business_id, trial_id, data):
+    from app.services.business_service import approve_work
+    return {"status": "approved", "id": approve_work(business_id, trial_id, data["score"], data.get("note"))}
+
+
+def get_unmatched(status="Open"):
+    return payment_service.list_unmatched(status or None)
+
+
+def resolve_unmatched_payment(unmatched_id, data):
+    return payment_service.resolve_unmatched(unmatched_id, data["resolution"])
+
+
+def staff_submit_payment(invoice_id, data, idempotency_key=None):
+    payment_id = payment_service.submit_payment(
+        invoice_id, data["method"], provider_ref=data.get("provider_ref"), amount=data.get("amount"),
+        submitted_by="staff", idempotency_key=idempotency_key, note=data.get("note"),
+    )
+    return {"status": "submitted", "id": payment_id}
+
+
+def get_biz_jobs(business_id):
+    return list_own_opportunities(business_id)
+
+
+def post_biz_job(business_id, data):
+    pending = [j for j in list_own_opportunities(business_id) if j["approval_status"] == "Pending"]
+
+    if len(pending) >= MAX_PENDING_JOBS:
+        from app.core.errors import Conflict
+        raise Conflict("You have several jobs waiting for approval. Please wait for BSTM to review them.")
+
+    opportunity_id = create_opportunity(
+        business_id=business_id,
+        title=data["title"],
+        description=data.get("description"),
+        department=data.get("department"),
+        budget=data.get("budget", 0),
+        approval_status="Pending",
+        created_by="business",
+    )
+
+    return {"status": "pending_approval", "id": opportunity_id}
+
+
+def get_biz_people(business_id, opportunity_id):
+    return list_own_applicants(business_id, opportunity_id)
+
+
+def get_biz_invoices(business_id):
+    return payment_service.list_invoices(business_id=business_id, limit=100)
+
+
+def submit_biz_payment(business_id, invoice_id, data, idempotency_key=None):
+    payment_id = payment_service.submit_payment(
+        invoice_id,
+        data["method"],
+        provider_ref=data.get("provider_ref"),
+        amount=data.get("amount"),
+        submitted_by="business",
+        business_id=business_id,
+        idempotency_key=idempotency_key,
+        note=data.get("note"),
+    )
+
+    return {"status": "submitted", "id": payment_id}
+
+
+def get_biz_notifications(business_id):
+    return notification_service.list_notifications("business", business_id)
+
+
+def read_biz_notifications(business_id):
+    return notification_service.mark_all_read("business", business_id)
+
+
+# ---------- finance + approvals (admin) ----------
+
+def decide_opportunity(opportunity_id, data):
+    return set_opportunity_approval(opportunity_id, data["approved"], data.get("note"))
+
+
+def get_invoices(status=None, limit=50, offset=0):
+    return payment_service.list_invoices(status=status, limit=limit, offset=offset)
+
+
+def get_payments(status=None, limit=50, offset=0):
+    return payment_service.list_payments(status, limit, offset)
+
+
+def confirm_payment(payment_id):
+    return {"status": "confirmed", "id": payment_service.confirm_payment(payment_id)}
+
+
+def reject_payment(payment_id, data):
+    return {"status": "rejected", "id": payment_service.reject_payment(payment_id, data.get("note"))}
+
+
+def get_payouts(status=None, limit=50, offset=0):
+    return payment_service.list_payouts(status, None, limit, offset)
+
+
+def pay_out(payout_id, data):
+    return {"status": "paid", "id": payment_service.mark_payout_paid(payout_id, data["provider_ref"])}
+
+
+def fail_payout(payout_id, data=None):
+    return {"status": "failed", "id": payment_service.fail_payout(payout_id, (data or {}).get("note"))}
+
+
+def ingest_provider_event(provider_name, headers, body):
+    from app.services.payment_providers import get_provider
+
+    event = get_provider(provider_name).verify_webhook(headers, body)
+
+    payment_id = payment_service.record_provider_payment(provider_name, event)
+
+    return {"status": "recorded" if payment_id else "parked_for_review", "id": payment_id}

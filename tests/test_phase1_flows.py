@@ -26,7 +26,8 @@ from app.services.matching_service import match_youth_to_opportunities
 from app.services.opportunity_service import create_opportunity, get_opportunity
 from app.services.trial_service import get_trial
 from app.services.youth_service import authenticate_youth, get_youth
-from tests.helpers import create_youth
+from app.services import payment_service
+from tests.helpers import create_youth, finish_work
 
 
 def _business(name="Shop", location="Mochudi"):
@@ -271,7 +272,12 @@ def test_completion_pays_the_youth_share(test_database):
     opp = _opportunity(budget=100)
     a = create_youth(name="A")
     assignment = _accepted(a, opp)
-    complete_assignment(assignment)
+    finish_work(assignment)
+    assert float(get_youth(a)["revenue"]) == 0.0          # nothing is "earned" until a payout is sent
+    inv = payment_service.list_invoices()[0]
+    payment_service.confirm_payment(payment_service.submit_payment(inv["id"], "Cash"))
+    payment_service.set_payout_account(a, "MyZaka", "A", "71234567")
+    payment_service.mark_payout_paid(payment_service.list_payouts(status="Pending")[0]["id"], "OUT-0001")
     assert float(get_youth(a)["revenue"]) == 70.0
 
 

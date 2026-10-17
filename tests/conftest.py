@@ -74,6 +74,12 @@ def _test_schema():
 _TABLES = [
     "rate_limit_events",
     "field_audits",
+    "notifications",
+    "unmatched_payments",
+    "payout_accounts",
+    "payouts",
+    "payments",
+    "invoices",
     "activity",
     "evidence",
     "opportunity_matches",

@@ -36,6 +36,65 @@ class BusinessCreate(BaseModel):
     sector: str = Field(..., max_length=100)
     location: str = Field(..., max_length=120)
     main_problem: str = Field(..., max_length=1000)
+    email: Optional[str] = Field(None, max_length=254)
+    phone: Optional[str] = Field(None, max_length=30)
+    password: Optional[str] = Field(None, max_length=128)
+
+
+class BusinessLogin(BaseModel):
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+
+
+class BizJobCreate(BaseModel):
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=4000)
+    department: Optional[str] = Field(None, max_length=100)
+    budget: float = 0
+
+
+class PaymentSubmit(BaseModel):
+    method: str = Field(..., max_length=20)
+    provider_ref: Optional[str] = Field(None, max_length=80)
+    amount: Optional[float] = None
+    note: Optional[str] = Field(None, max_length=300)
+
+
+class BizApprove(BaseModel):
+    score: float = Field(..., ge=0, le=100)
+    note: Optional[str] = Field(None, max_length=500)
+
+
+class ResolveUnmatched(BaseModel):
+    resolution: str = Field(..., max_length=300)
+
+
+class PaymentReject(BaseModel):
+    note: Optional[str] = Field(None, max_length=300)
+
+
+class PayoutPaid(BaseModel):
+    provider_ref: str = Field(..., max_length=80)
+
+
+class ProfileUpdate(BaseModel):
+    bio: Optional[str] = Field(None, max_length=500)
+    location: str = Field(..., max_length=120)
+    availability: Optional[str] = Field(None, max_length=100)
+    equipment: Optional[str] = Field(None, max_length=300)
+    passion: Optional[str] = Field(None, max_length=300)
+    public_profile: bool = False
+
+
+class PayoutAccountSet(BaseModel):
+    method: str = Field(..., max_length=20)
+    account_name: str = Field(..., max_length=120)
+    account_ref: str = Field(..., max_length=60)
+
+
+class ApprovalDecision(BaseModel):
+    approved: bool
+    note: Optional[str] = Field(None, max_length=300)
 
 
 class AuditStatusUpdate(BaseModel):

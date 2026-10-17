@@ -10,7 +10,7 @@ def _int(name, default):
 
 APP_NAME = os.getenv("BSTM_APP_NAME", "BSTM Platform")
 
-APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.1.0")
+APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.4.0")
 
 ENVIRONMENT = os.getenv("BSTM_ENVIRONMENT", "development")
 
@@ -53,3 +53,10 @@ RATE_LOGIN_PER_15MIN_ACCOUNT = _int("BSTM_RATE_LOGIN_PER_15MIN_ACCOUNT", 8)
 
 # Maximum simultaneously open applications one youth may hold.
 MAX_OPEN_APPLICATIONS = _int("BSTM_MAX_OPEN_APPLICATIONS", 5)
+
+# Shown to businesses on their invoices: where to send the money (e.g.
+# "MyZaka 7xxxxxxx - BSTM Activation. Use the invoice number as reference.").
+PAY_INSTRUCTIONS = os.getenv(
+    "BSTM_PAY_INSTRUCTIONS",
+    "Ask your BSTM contact for the payment details, then submit the payment reference here.",
+)

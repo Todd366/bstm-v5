@@ -55,7 +55,14 @@ PUBLIC_WRITES = {
     ("POST", "/youth"): ("register", RATE_REGISTER_PER_HOUR),
     ("POST", "/businesses"): ("register-business", RATE_REGISTER_PER_HOUR),
     ("POST", "/youth/login"): ("login", RATE_LOGIN_PER_HOUR_IP),
+    ("POST", "/businesses/login"): ("login-business", RATE_LOGIN_PER_HOUR_IP),
 }
+
+# Public by prefix. Webhooks authenticate by HMAC signature inside the
+# route; public profiles only ever return data the owner opted to share.
+PUBLIC_GET_PREFIXES = ("/public/profiles/",)
+PUBLIC_POST_PREFIXES = ("/webhooks/",)
+WEBHOOK_RATE_PER_HOUR = 600
 
 # Documentation pages load scripts from a CDN, so the strict CSP below
 # is not applied to them.
@@ -85,6 +92,17 @@ _SECURITY_HEADERS = [
 
 def is_youth_path(path):
     return path == "/me" or path.startswith("/me/")
+
+
+def is_business_path(path):
+    return path == "/biz" or path.startswith("/biz/")
+
+
+def _bearer(headers):
+    auth_header = headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return None
 
 
 def client_ip(scope, headers):
@@ -167,26 +185,32 @@ class AuthAndLoggingMiddleware:
         if method == "OPTIONS":
             return None
 
-        if is_youth_path(path):
-            token = None
-            auth_header = headers.get("authorization", "")
-            if auth_header.lower().startswith("bearer "):
-                token = auth_header[7:].strip()
+        for matches, role, state_key in (
+            (is_youth_path, "youth", "youth_id"),
+            (is_business_path, "business", "business_id"),
+        ):
+            if matches(path):
+                token = _bearer(headers)
 
-            try:
-                youth_id = decode_access_token(token) if token else None
-            except RuntimeError:
-                return _json(500, "Server misconfigured: BSTM_JWT_SECRET is not set.", request_id)
+                try:
+                    subject = decode_access_token(token, role=role) if token else None
+                except RuntimeError:
+                    return _json(500, "Server misconfigured: BSTM_JWT_SECRET is not set.", request_id)
 
-            if not youth_id:
-                return _json(401, "Missing or invalid access token.", request_id)
+                if not subject:
+                    return _json(401, "Missing or invalid access token.", request_id)
 
-            state["youth_id"] = youth_id
-            return None
+                state[state_key] = subject
+                return None
 
         rule = PUBLIC_WRITES.get((method, path))
 
-        if rule is None and path not in PUBLIC_PATHS:
+        if rule is None and method == "POST" and path.startswith(PUBLIC_POST_PREFIXES):
+            rule = ("webhook", WEBHOOK_RATE_PER_HOUR)
+
+        is_public_get = method == "GET" and path.startswith(PUBLIC_GET_PREFIXES)
+
+        if rule is None and path not in PUBLIC_PATHS and not is_public_get:
             if not API_KEY:
                 # Fail closed: an unset key is a misconfiguration, not
                 # "no auth needed".

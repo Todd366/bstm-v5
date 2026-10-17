@@ -24,6 +24,8 @@ import psycopg2
 
 from app.core.config import MAX_OPEN_APPLICATIONS
 from app.core.errors import Conflict, Forbidden
+from app.services.notification_service import notify
+from app.services.payment_service import create_invoice_in_tx
 from app.core.validation import require_uuid
 from app.db.database import transaction
 
@@ -49,7 +51,7 @@ def _log(db, event, actor_id, target_id, details):
     )
 
 
-def _lock_assignment(db, assignment_id, acting_youth_id=None):
+def _lock_assignment(db, assignment_id, acting_youth_id=None, acting_business_id=None):
     """Locks the opportunity, then the assignment, and returns the
     assignment joined with youth/opportunity facts."""
 
@@ -74,7 +76,7 @@ def _lock_assignment(db, assignment_id, acting_youth_id=None):
                y.name AS youth_name,
                o.title AS opportunity_title,
                o.status AS opportunity_status,
-               o.budget
+               o.budget, o.business_id
         FROM opportunity_assignments oa
         JOIN youth y ON y.id = oa.youth_id
         JOIN opportunities o ON o.id = oa.opportunity_id
@@ -90,6 +92,10 @@ def _lock_assignment(db, assignment_id, acting_youth_id=None):
     if acting_youth_id is not None and str(row["youth_id"]) != str(acting_youth_id):
         # Same answer as a missing row: never confirm another person's
         # assignment exists.
+        raise ValueError("Assignment not found")
+
+    if acting_business_id is not None and str(row["business_id"]) != str(acting_business_id):
+        # A business only ever sees its own jobs.
         raise ValueError("Assignment not found")
 
     return row
@@ -138,7 +144,7 @@ def create_assignment(youth_id, opportunity_id, match_id=None, mode="offer"):
 
             opportunity = db.execute(
                 """
-                SELECT id, business_id, title, description, status
+                SELECT id, business_id, title, description, status, approval_status
                 FROM opportunities
                 WHERE id = ?
                 FOR UPDATE
@@ -161,7 +167,7 @@ def create_assignment(youth_id, opportunity_id, match_id=None, mode="offer"):
                     else "Assignment already exists"
                 )
 
-            if opportunity["status"] != "Open":
+            if opportunity["status"] != "Open" or opportunity["approval_status"] != "Approved":
                 raise Conflict("Opportunity is not open")
 
             if match_id:
@@ -222,6 +228,10 @@ def create_assignment(youth_id, opportunity_id, match_id=None, mode="offer"):
                     db, opportunity_id, assignment_id, "opportunity offered to someone else"
                 )
 
+            if mode == "offer":
+                notify(db, "youth", youth_id, "job_offer", "You have a job offer",
+                       "BSTM offered you: " + opportunity["title"] + ". Open My work to accept or decline.")
+
             _log(
                 db,
                 "opportunity_assigned" if mode == "offer" else "opportunity_applied",
@@ -243,11 +253,11 @@ def create_assignment(youth_id, opportunity_id, match_id=None, mode="offer"):
     return str(assignment_id)
 
 
-def accept_assignment(assignment_id, acting_youth_id=None):
+def accept_assignment(assignment_id, acting_youth_id=None, acting_business_id=None):
 
     with transaction() as db:
 
-        assignment = _lock_assignment(db, assignment_id, acting_youth_id)
+        assignment = _lock_assignment(db, assignment_id, acting_youth_id, acting_business_id)
 
         if assignment["status"] != "Pending":
             raise ValueError("Only pending assignments can be accepted")
@@ -259,7 +269,10 @@ def accept_assignment(assignment_id, acting_youth_id=None):
             raise Conflict("This opportunity is no longer available")
 
         if is_application and acting_youth_id is not None:
-            raise Forbidden("Only BSTM can accept an application")
+            raise Forbidden("Only BSTM or the business can accept an application")
+
+        if is_offer and acting_business_id is not None:
+            raise Forbidden("This job was offered by BSTM; the youth must accept it")
 
         db.execute(
             "UPDATE opportunity_assignments SET status = 'Accepted', accepted_at = now() WHERE id = ?",
@@ -279,6 +292,10 @@ def accept_assignment(assignment_id, acting_youth_id=None):
                 "another applicant was selected",
             )
 
+        if is_application:
+            notify(db, "youth", assignment["youth_id"], "application_accepted", "You got the job",
+                   "You were selected for: " + assignment["opportunity_title"] + ". Open My work and start.")
+
         _log(
             db,
             "assignment_accepted",
@@ -295,11 +312,11 @@ def accept_assignment(assignment_id, acting_youth_id=None):
     return str(assignment["id"])
 
 
-def decline_assignment(assignment_id, acting_youth_id=None):
+def decline_assignment(assignment_id, acting_youth_id=None, acting_business_id=None):
 
     with transaction() as db:
 
-        assignment = _lock_assignment(db, assignment_id, acting_youth_id)
+        assignment = _lock_assignment(db, assignment_id, acting_youth_id, acting_business_id)
 
         if assignment["status"] != "Pending":
             raise ValueError("Only pending assignments can be declined")
@@ -316,6 +333,10 @@ def decline_assignment(assignment_id, acting_youth_id=None):
                 "UPDATE opportunities SET status = 'Open', updated_at = now() WHERE id = ?",
                 (assignment["opportunity_id"],),
             )
+
+        if acting_youth_id is None:
+            notify(db, "youth", assignment["youth_id"], "application_declined", "Application update",
+                   "You were not selected for: " + assignment["opportunity_title"] + ". Keep applying, new jobs are posted often.")
 
         _log(
             db,
@@ -378,68 +399,100 @@ def cancel_assignment(assignment_id, acting_youth_id=None):
     return str(assignment["id"])
 
 
-def complete_assignment(assignment_id):
+def _complete_locked(db, assignment, require_work=True):
+    """Completes an already-locked assignment inside the caller's
+    transaction. Money (an invoice) is only ever issued for work that
+    was approved: evidence before payment."""
 
-    with transaction() as db:
+    if assignment["status"] != "Accepted":
+        raise ValueError("Only accepted assignments can be completed")
 
-        assignment = _lock_assignment(db, assignment_id)
-
-        if assignment["status"] != "Accepted":
-            raise ValueError("Only accepted assignments can be completed")
-
-        db.execute(
-            "UPDATE opportunity_assignments SET status = 'Completed', completed_at = now() WHERE id = ?",
+    if require_work:
+        trial = db.execute(
+            "SELECT status FROM trials WHERE assignment_id = ? AND status <> 'Cancelled' ORDER BY created_at DESC LIMIT 1",
             (assignment["id"],),
-        )
+        ).fetchone()
 
-        db.execute(
-            "UPDATE opportunities SET status = 'Completed', updated_at = now() WHERE id = ?",
-            (assignment["opportunity_id"],),
-        )
+        if not trial or trial["status"] != "Completed":
+            raise ValueError("The work must be approved before the job is completed")
 
-        db.execute(
-            "UPDATE youth SET completed_opportunities = completed_opportunities + 1 WHERE id = ?",
-            (assignment["youth_id"],),
-        )
+    db.execute(
+        "UPDATE opportunity_assignments SET status = 'Completed', completed_at = now() WHERE id = ?",
+        (assignment["id"],),
+    )
 
-        budget = float(assignment["budget"] or 0)
+    db.execute(
+        "UPDATE opportunities SET status = 'Completed', updated_at = now() WHERE id = ?",
+        (assignment["opportunity_id"],),
+    )
+
+    db.execute(
+        "UPDATE youth SET completed_opportunities = completed_opportunities + 1 WHERE id = ?",
+        (assignment["youth_id"],),
+    )
+
+    budget = float(assignment["budget"] or 0)
+
+    if budget > 0:
+
         youth_share = round(budget * YOUTH_REVENUE_SHARE, 2)
-        ecosystem_share = round(budget - youth_share, 2)
 
-        if budget > 0:
-
-            db.execute(
-                "UPDATE youth SET revenue = revenue + ? WHERE id = ?",
-                (youth_share, assignment["youth_id"]),
-            )
-
-            _log(
-                db,
-                "revenue_distributed",
-                assignment["youth_id"],
-                assignment["id"],
-                {
-                    "assignment_id": str(assignment["id"]),
-                    "opportunity_id": str(assignment["opportunity_id"]),
-                    "budget": budget,
-                    "youth_share": youth_share,
-                    "ecosystem_share": ecosystem_share,
-                },
-            )
-
+        # `youth.revenue` is NOT touched here: it only grows when a payout
+        # is actually sent (payment_service.mark_payout_paid).
         _log(
             db,
-            "assignment_completed",
+            "job_value_split",
             assignment["youth_id"],
             assignment["id"],
             {
                 "assignment_id": str(assignment["id"]),
                 "opportunity_id": str(assignment["opportunity_id"]),
-                "status": "Completed",
+                "budget": budget,
+                "youth_share": youth_share,
+                "ecosystem_share": round(budget - youth_share, 2),
             },
         )
 
+    create_invoice_in_tx(
+        db, assignment["id"], assignment["business_id"], assignment["youth_id"],
+        assignment["opportunity_id"], budget, YOUTH_REVENUE_SHARE,
+    )
+
+    _log(
+        db,
+        "assignment_completed",
+        assignment["youth_id"],
+        assignment["id"],
+        {
+            "assignment_id": str(assignment["id"]),
+            "opportunity_id": str(assignment["opportunity_id"]),
+            "status": "Completed",
+        },
+    )
+
+
+def complete_assignment(assignment_id, require_work=True):
+
+    with transaction() as db:
+
+        assignment = _lock_assignment(db, assignment_id)
+        _complete_locked(db, assignment, require_work)
+
     return str(assignment["id"])
+
+
+def complete_assignment_in_tx(db, assignment_id):
+    """Called when a trial is approved: finishes the job in the same
+    transaction. Returns True if the job was completed here."""
+
+    assignment = _lock_assignment(db, assignment_id)
+
+    if assignment["status"] != "Accepted":
+        return False
+
+    _complete_locked(db, assignment, require_work=True)
+
+    return True
 
 
 def get_assignment(assignment_id, acting_youth_id=None):
@@ -495,7 +548,10 @@ def list_youth_assignments(youth_id):
             FROM opportunity_assignments oa
             JOIN opportunities o ON o.id = oa.opportunity_id
             LEFT JOIN businesses b ON b.id = o.business_id
-            LEFT JOIN trials t ON t.assignment_id = oa.id
+            LEFT JOIN LATERAL (
+                SELECT id, status FROM trials
+                WHERE assignment_id = oa.id ORDER BY created_at DESC LIMIT 1
+            ) t ON true
             WHERE oa.youth_id = ?
             ORDER BY oa.created_at DESC
             """,

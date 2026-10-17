@@ -32,7 +32,7 @@ from app.services.opportunity_service import (
     create_opportunity
 )
 
-from tests.helpers import create_youth
+from tests.helpers import create_youth, finish_work
 
 
 
@@ -237,9 +237,7 @@ def test_complete_assignment(
         assignment_id
     )
 
-    complete_assignment(
-        assignment_id
-    )
+    finish_work(assignment_id)
 
     assignment = get_assignment(
         assignment_id
@@ -274,9 +272,7 @@ def test_completed_opportunity_counter_increments(
         assignment_id
     )
 
-    complete_assignment(
-        assignment_id
-    )
+    finish_work(assignment_id)
 
     with transaction() as db:
 

@@ -85,13 +85,14 @@ def burn_verification_time(password):
     verify_password(password if isinstance(password, str) else "", _dummy_hash)
 
 
-def create_access_token(youth_id):
+def create_access_token(subject_id, role="youth"):
     if not JWT_SECRET:
         raise RuntimeError("BSTM_JWT_SECRET is not set — cannot issue tokens.")
 
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": str(youth_id),
+        "sub": str(subject_id),
+        "role": role,
         "iss": JWT_ISSUER,
         "iat": now,
         "exp": now + TOKEN_LIFETIME,
@@ -99,9 +100,12 @@ def create_access_token(youth_id):
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-def decode_access_token(token):
-    """Returns the youth_id in a valid token, or None if the token is
-    missing, malformed, expired or signed with a different secret.
+def decode_access_token(token, role="youth"):
+    """Returns the subject id of a valid token issued for `role`, or None
+    if the token is missing, malformed, expired, signed with a different
+    secret, or issued for a different role (a business token never works
+    on youth routes and vice versa). Tokens issued before roles existed
+    carry no role claim and count as youth tokens.
     Raises RuntimeError only for misconfiguration (no JWT_SECRET)."""
 
     if not JWT_SECRET:
@@ -114,6 +118,8 @@ def decode_access_token(token):
         payload = jwt.decode(
             token, JWT_SECRET, algorithms=["HS256"], issuer=JWT_ISSUER
         )
+        if payload.get("role", "youth") != role:
+            return None
         return payload.get("sub")
     except jwt.InvalidTokenError:
         return None

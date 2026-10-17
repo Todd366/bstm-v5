@@ -11,11 +11,14 @@ from app.api.service import (
     activate_youth,
     get_capability_catalog,
     get_department_list,
+    ingest_provider_event,
+    login_business,
     login_youth,
+    view_public_profile,
 )
 from app.core.health import liveness
 from app.routes.common import service_call
-from app.schemas.models import BusinessCreate, YouthCreate, YouthLogin
+from app.schemas.models import BusinessCreate, BusinessLogin, YouthCreate, YouthLogin
 
 router = APIRouter()
 
@@ -98,3 +101,22 @@ def login(payload: YouthLogin):
 @router.post("/businesses", status_code=201)
 def register_business(payload: BusinessCreate):
     return service_call(activate_business, payload.dict())
+
+
+@router.post("/businesses/login")
+def login_biz(payload: BusinessLogin):
+    return service_call(login_business, payload.dict())
+
+
+@router.get("/public/profiles/{youth_id}")
+def public_profile(youth_id: str):
+    return service_call(view_public_profile, youth_id)
+
+
+@router.post("/webhooks/{provider}")
+async def provider_webhook(provider: str, request: Request):
+    """Signed events from a payment provider or automation. Authenticity
+    is the HMAC signature, not the admin key. Idempotent."""
+
+    body = await request.body()
+    return service_call(ingest_provider_event, provider, request.headers, body)

@@ -30,7 +30,7 @@ _PROFILE_COLUMNS = """
     id, name, location, passion, goal, availability, equipment,
     level, capability_score, learning_score, reputation_score,
     reliability_score, completed_trials, completed_opportunities,
-    revenue, email, intake, created_at, updated_at
+    revenue, email, intake, bio, public_profile, created_at, updated_at
 """
 
 # List views leave out the questionnaire answers (financial position,

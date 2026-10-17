@@ -18,3 +18,8 @@ Change `BSTM_API_KEY` in Vercel and redeploy (staff re-enter key). Changing `BST
 
 ## Tests
 `BSTM_DATABASE_URL=... sh scripts/verify.sh` (temporary schema, real data untouched).
+
+## v5.4 additions
+- Env: `BSTM_ENVIRONMENT=production` (closes CORS), `BSTM_PAY_INSTRUCTIONS` (text shown to businesses: where to send money), `BSTM_WEBHOOK_SECRET_SMS_BRIDGE` / `_GATEWAY` (only if you connect an automation).
+- Money runbook: business submits payment reference → Queue "Payments to confirm": confirm only after the money is visible in the account → payout appears in "Payouts to send": send from MyZaka/bank, paste the receipt reference, "Mark as paid". Unmatched money: resolve with a note (refund or hand-match).
+- Browser smoke test: `NODE_PATH=<playwright> node tests/e2e/smoke.mjs`.

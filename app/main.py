@@ -22,6 +22,7 @@ from app.core.config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from app.core.logging_setup import configure_logging
 from app.core.middleware import AuthAndLoggingMiddleware
 from app.routes.admin_routes import router as admin_router
+from app.routes.biz_routes import router as biz_router
 from app.routes.me_routes import router as me_router
 from app.routes.public_routes import router as public_router
 
@@ -38,7 +39,7 @@ if CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-API-Key"],
     )
 
@@ -72,4 +73,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 app.include_router(public_router)
 app.include_router(me_router)
+app.include_router(biz_router)
 app.include_router(admin_router)
