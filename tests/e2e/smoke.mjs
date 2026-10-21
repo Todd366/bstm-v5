@@ -24,6 +24,7 @@ await new Promise((r) => server.listen(0, r));
 const base = "http://localhost:" + server.address().port;
 
 const ok = (b) => ({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+let migrated = false;
 const API = (m, u, h, body) => {
   const p = u.pathname;
   seen.push({ m, p, q: u.search, key: h["idempotency-key"], body });
@@ -55,6 +56,8 @@ const API = (m, u, h, body) => {
   if (p === "/biz/invoices" && m === "GET") return ok([{ id: "i1", reference: "BSTM-1000", amount: 500, paid_amount: 0, pending_payments: 0, status: "Issued", opportunity_title: "Paint wall", created_at: "2026-10-01T00:00:00Z" }]);
   if (p === "/biz/invoices/i1/payments") return ok({ status: "submitted", id: "pay1" });
   if (p === "/biz/notifications") return ok({ unread: 0, items: [] });
+  if (p === "/admin/migrations") return ok({ applied: [], pending: migrated ? [] : ["20261016000000_ledger_notifications_accounts.sql"] });
+  if (p === "/admin/migrations/apply") { migrated = true; return ok({ applied_now: ["20261016000000_ledger_notifications_accounts.sql"], pending: [] }); }
   if (p === "/admin/stats") return ok({ counts: { youth: 21, businesses: 3, opportunities: 4, trials: 2 } });
   if (p === "/admin/queue") return ok({
     applications: [], trials: [],
@@ -160,7 +163,11 @@ await page.getByRole("button", { name: "Log out" }).click();
 await page.waitForSelector("text=Welcome to BSTM Activation");
 await click("Staff sign in");
 await page.fill("[name=key]", "k"); await page.locator("form button[type=submit]").click();
+await page.waitForSelector("text=Database update needed");
+check("staff sees database update screen", await text("20261016000000"));
+await click("Update database now");
 await page.waitForSelector("text=Payments to confirm");
+check("update applied via API", seen.some((s) => s.m === "POST" && s.p === "/admin/migrations/apply"));
 check("staff queue: money sections", (await text("Unmatched money")) && (await text("Payouts to send")) && (await text("Jobs to approve")) && (await text("Money received")));
 await click("Money received"); await page.waitForTimeout(300);
 check("confirm payment", seen.some((s) => s.p === "/payments/pay1/confirm"));

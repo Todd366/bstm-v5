@@ -3,6 +3,8 @@
 from fastapi import APIRouter, Header, Query
 
 from app.api.service import (
+    get_migration_status,
+    run_migrations,
     get_unmatched,
     resolve_unmatched_payment,
     staff_submit_payment,
@@ -394,3 +396,14 @@ def unmatched_list(status: str = Query("Open", max_length=20)):
 @router.post("/unmatched-payments/{unmatched_id}/resolve")
 def unmatched_resolve(unmatched_id: str, payload: ResolveUnmatched):
     return service_call(resolve_unmatched_payment, unmatched_id, payload.dict())
+
+
+@router.get("/admin/migrations")
+def migrations_status():
+    return service_call(get_migration_status)
+
+
+@router.post("/admin/migrations/apply")
+def migrations_apply():
+    """Applies the SQL files bundled with this release. Admin key only."""
+    return service_call(run_migrations)

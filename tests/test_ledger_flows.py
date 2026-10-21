@@ -364,3 +364,13 @@ def test_unmatched_provider_money_is_parked_not_lost(test_database):
     assert len(queue_service.review_queue()["unmatched"]) == 2
     payment_service.resolve_unmatched(open_items[0]["id"], "Refunded customer")
     assert len(payment_service.list_unmatched()) == 1
+
+
+def test_migration_runner_tracks_and_is_rerunnable(test_database):
+    from app.services import migration_service
+    st = migration_service.status()
+    assert all(n < migration_service.BASELINE_CUTOFF for n in st["applied"])      # older ones assumed applied
+    assert len(st["pending"]) >= 3 and "20261016000000_ledger_notifications_accounts.sql" in st["pending"]
+    first = migration_service.apply_pending()                                       # files are idempotent: re-running over an up-to-date schema is safe
+    assert first["pending"] == [] and len(first["applied_now"]) >= 3
+    assert migration_service.apply_pending()["applied_now"] == []                  # nothing left

@@ -815,14 +815,32 @@
     });
     show(f);
   }
-  function adminLogout() { S.adminKey = null; try { sessionStorage.removeItem("bstm_admin"); } catch (e) {} route(); }
+  function adminLogout() { S.adminKey = null; S.migOk = false; try { sessionStorage.removeItem("bstm_admin"); } catch (e) {} route(); }
   var A = function (path, body) { return api(path, { admin: true, method: body !== undefined ? "POST" : "GET", body: body !== undefined ? body : undefined }); };
   function aact(card, label, path, body, cls, ok) {
     var b = h("button", { class: "btn sm " + (cls || ""), type: "button", text: label });
     b.addEventListener("click", function () { busy(b, A(path, body || {})).then(function () { say(ok || "Done."); route(); }).catch(fail); });
     card.appendChild(b);
   }
+  function migrateScreen(m) {
+    var out = h("p", { class: "err", role: "alert" });
+    var b = h("button", { class: "btn", type: "button", text: "Update database now" });
+    b.addEventListener("click", function () {
+      out.textContent = "";
+      busy(b, A("/admin/migrations/apply", {})).then(function (r) { S.migOk = true; say("Database updated (" + r.applied_now.length + " changes)."); route(); })
+        .catch(function (e) { out.textContent = e.message; });
+    });
+    show(h("div", { class: "card" }, h("h1", { text: "Database update needed" }),
+      h("p", { text: "This version needs " + m.pending.length + " database change(s). It is safe and only adds things; your data is kept." }),
+      h("ul", null, m.pending.map(function (n) { return h("li", { class: "m", text: n }); })), out, b,
+      h("button", { class: "btn sec", type: "button", text: "Skip for now", onclick: function () { S.migOk = true; route(); } })));
+  }
   function adminRoute() {
+    if (!S.migOk) {
+      show(h("div", { class: "spin", text: t("Loading…") }));
+      return A("/admin/migrations").then(function (m) { if (m && m.pending && m.pending.length) return migrateScreen(m); S.migOk = true; route(); },
+        function () { S.migOk = true; route(); });
+    }
     show(h("div", { class: "spin", text: t("Loading…") }));
     ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit }[S.atab] || aQueue)().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);

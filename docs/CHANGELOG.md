@@ -13,3 +13,6 @@
 
 ## Not done (see docs/REALITY_AUDIT_2026-10-17.md)
 Phone/OTP login, password reset, SMS/WhatsApp notifications, staff accounts with roles, deposit-before-start, invoice void/dispute, separate Supabase project, CI that runs the FastAPI routes.
+
+## v5.4.1
+- In-app database updater: staff console shows "Database update needed" after sign-in and applies bundled migrations with one tap (`GET /admin/migrations`, `POST /admin/migrations/apply`, tracked in `schema_migrations`). No SQL editor required.

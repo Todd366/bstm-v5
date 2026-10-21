@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/**/*.py": {
-      "includeFiles": "public/**",
-      "excludeFiles": "{tests/**,migrations/**,scripts/**,docs/**,**/test_*.py,*.md,*.sql}"
+      "includeFiles": "{public/**,migrations/**}",
+      "excludeFiles": "{tests/**,scripts/**,docs/**,**/test_*.py,*.md}"
     }
   }
 }

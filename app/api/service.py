@@ -730,3 +730,17 @@ def ingest_provider_event(provider_name, headers, body):
     payment_id = payment_service.record_provider_payment(provider_name, event)
 
     return {"status": "recorded" if payment_id else "parked_for_review", "id": payment_id}
+
+
+def get_migration_status():
+    from app.services import migration_service
+    return migration_service.status()
+
+
+def run_migrations():
+    from app.services import migration_service
+    try:
+        return migration_service.apply_pending()
+    except RuntimeError as exc:
+        from app.core.errors import Conflict
+        raise Conflict(str(exc))
