@@ -10,7 +10,7 @@ def _int(name, default):
 
 APP_NAME = os.getenv("BSTM_APP_NAME", "BSTM Platform")
 
-APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.5.1")
+APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.5.2")
 
 ENVIRONMENT = os.getenv("BSTM_ENVIRONMENT", "development")
 
@@ -26,7 +26,7 @@ DB_SCHEMA = os.getenv("BSTM_DB_SCHEMA", "activation")
 
 # Shared-secret admin key. Deliberately NO default: an unset key means
 # auth is misconfigured, not "open".
-API_KEY = os.getenv("BSTM_API_KEY")
+API_KEY = os.getenv("BSTM_STAFF_KEY") or os.getenv("BSTM_API_KEY")
 
 # Signs/verifies youth login tokens. Deliberately no default.
 JWT_SECRET = os.getenv("BSTM_JWT_SECRET")

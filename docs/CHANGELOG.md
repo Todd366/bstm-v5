@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.5.2
+- Emergency admin key can be set as `BSTM_STAFF_KEY` (falls back to `BSTM_API_KEY`).
+
 ## 5.5.1
 - Youth home shows "Skills to add next" (ported from the old v3 skill-gap analysis).
 - Old prototype files archived with a review (`docs/archive/OLD_FILES_REVIEW.md`).
