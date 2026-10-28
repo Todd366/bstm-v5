@@ -381,6 +381,7 @@
       h("p", null, h("strong", { text: b.primary.name }), " ", h("span", { class: "tag ok", text: b.primary.score + "% fit" })),
       h("p", { text: b.mission }),
       h("h3", { text: "Your first steps" }), h("ol", null, b.priorities.map(function (x) { return h("li", { text: x }); })),
+      b.skills_to_learn && b.skills_to_learn.length ? h("div", null, h("h3", { text: "Skills to add next" }), h("p", null, b.skills_to_learn.map(function (x) { return h("span", { class: "tag", title: x.description || "", text: x.name }); })), h("p", { class: "m", text: "Add them under Me -> Skills, then prove them with work." })) : null,
       h("h3", { text: "Learning path" }), h("ol", null, b.learning_path.map(function (x) { return h("li", { text: x }); })),
       b.alternatives && b.alternatives.length ? h("p", { class: "m", text: "Also a fit: " + b.alternatives.map(function (x) { return x.name; }).join(", ") }) : null);
   }

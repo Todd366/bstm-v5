@@ -20,13 +20,11 @@ Not done: see Phase 3-5.
 - [ ] First admin created under Team; shared key no longer used day to day.
 - [ ] GitHub repo set to private (old history contains `data/` with names).
 
-## Phase 1: Old-file review (before archiving)
-Old files live only in git history (commit 753224b): `bstm_activation.py`, `_v2`, `_v3`, `_v4`, `repair_bstm.py`, `data/youth.json`.
-For each file record in `docs/archive/OLD_FILES_REVIEW.md`: what problem it solved, how it was built, what was lost in v5, what to port.
-- [ ] Owner supplies the zip (block in chat). 
-- [ ] Review each; list ideas to port (rules, scoring, questions, data fields, repair logic).
-- [ ] Port accepted ideas as tests first, then code.
-- [ ] Move originals to `docs/archive/legacy/` (kept, never imported). Delete `data/` content (personal data).
+## Phase 1: Old-file review (done in v5.5.1)
+Reviewed in `docs/archive/OLD_FILES_REVIEW.md`; originals in `docs/archive/legacy/`.
+- [x] Skill gaps ported ("Skills to add next").
+- [ ] Cascade: after a job completes, suggest the next job for that business (needs paying history first).
+- [ ] Business audit area -> department routing, once job postings carry structured requirements.
 
 ## Phase 2: Bug hunt (continuous)
 Method per module: read the code, write a failing test for each suspected bug, fix, keep the test.

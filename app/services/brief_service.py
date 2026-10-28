@@ -10,6 +10,9 @@ TAG_MAP = {
     "Agriculture": "agriculture", "Trades": "trades", "Finance": "finance",
     "Research": "research", "Community": "community",
 }
+# Department categories that have no skills of the same name borrow from these
+# (ported from the old v3 skill-gap tables, now driven by the live skill catalogue).
+SKILL_CATEGORIES = {"Operations": ["Business", "Finance", "Trades"]}
 RANK = {"low": 0, "medium": 1, "high": 2}
 
 MISSION = {
@@ -72,13 +75,32 @@ def build_brief(intake):
     }
 
 
+def skills_to_learn(db, youth_id, primary_category, limit=5):
+    """Catalogue skills in the youth's best-fit area that they have not claimed yet."""
+
+    categories = SKILL_CATEGORIES.get(primary_category, [primary_category])
+    marks = ",".join("?" * len(categories))
+    rows = db.execute(
+        "SELECT c.name, c.category, c.description FROM capabilities c "
+        "WHERE c.category IN (" + marks + ") "
+        "AND NOT EXISTS (SELECT 1 FROM youth_capabilities yc WHERE yc.youth_id = ? AND yc.capability_id = c.id) "
+        "ORDER BY c.category, c.name LIMIT ?",
+        tuple(categories) + (youth_id, limit),
+    ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
 def get_brief(youth_id):
     youth_id = require_uuid(youth_id, "Youth")
 
     with transaction() as db:
         row = db.execute("SELECT intake FROM youth WHERE id = ?", (youth_id,)).fetchone()
 
-    if not row:
-        raise ValueError("Youth not found")
+        if not row:
+            raise ValueError("Youth not found")
 
-    return build_brief(row["intake"])
+        brief = build_brief(row["intake"])
+        brief["skills_to_learn"] = skills_to_learn(db, youth_id, brief["primary"]["category"])
+
+    return brief

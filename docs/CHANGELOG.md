@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.5.1
+- Youth home shows "Skills to add next" (ported from the old v3 skill-gap analysis).
+- Old prototype files archived with a review (`docs/archive/OLD_FILES_REVIEW.md`).
+- `docs/ROADMAP.md` added.
+
 ## 5.5.0
 - Staff accounts with roles (admin, finance, field, support); shared key kept as emergency admin.
 - Money and approval actions record who did them.

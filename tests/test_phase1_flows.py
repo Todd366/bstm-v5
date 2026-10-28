@@ -440,3 +440,18 @@ def test_candidates_for_opportunity_ranks_matching_youth(test_database):
 
     names = [c["name"] for c in matching_service.candidates_for_opportunity(oid)]
     assert names == ["Plumber"] and "Nobody" not in names
+
+
+def test_brief_lists_skills_not_yet_claimed(test_database):
+    from app.services import capability_service
+    from app.services.brief_service import get_brief
+    from tests.helpers import create_youth
+
+    web = capability_service.create_capability("Web Development", "Technology")
+    capability_service.create_capability("Chatbots", "Technology")
+    capability_service.create_capability("Sales", "Business")
+    yid = create_youth(name="Gap Test", intake={"interests": ["Technology"], "resources": ["Smartphone", "Computer"], "availability": "Full-time"})
+    capability_service.assign_capability_to_youth(yid, web)
+
+    names = [s["name"] for s in get_brief(yid)["skills_to_learn"]]
+    assert names == ["Chatbots"]
