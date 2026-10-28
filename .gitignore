@@ -20,4 +20,3 @@ bstm.db.backup.*
 
 *.zip
 .env
-bstm_v5/
