@@ -1,6 +1,6 @@
 /* Offline shell: cache the app files so the app opens on weak networks.
    API calls are never cached. */
-var CACHE = "bstm-shell-v5.4";
+var CACHE = "bstm-shell-v5.5";
 var SHELL = ["/", "/app.js", "/app.css", "/favicon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", function (e) {

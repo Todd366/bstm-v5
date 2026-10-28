@@ -247,7 +247,7 @@ def close_opportunity(opportunity_id):
     return {"id": opportunity_id, "status": "Cancelled"}
 
 
-def set_opportunity_approval(opportunity_id, approved, note=None):
+def set_opportunity_approval(opportunity_id, approved, note=None, decided_by=None):
     """Staff decision on a job a business posted. Approved jobs become
     visible to youth; rejected ones are closed. Notifies the business."""
 
@@ -283,7 +283,7 @@ def set_opportunity_approval(opportunity_id, approved, note=None):
 
         db.execute(
             "INSERT INTO activity (event, actor_id, target_id, details) VALUES (?, ?, ?, ?)",
-            ("opportunity_" + new_status.lower(), opp["business_id"], opportunity_id, json.dumps({"reason": note})),
+            ("opportunity_" + new_status.lower(), opp["business_id"], opportunity_id, json.dumps({"reason": note, "by": decided_by})),
         )
 
         notify(

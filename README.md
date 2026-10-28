@@ -5,9 +5,9 @@ Connects Batswana youth to real work: register → match → apply → trial →
 - API: FastAPI + Postgres (Supabase, schema `activation`), deployed on Vercel.
 - Frontend: `public/` (static, mobile-first, low-data, English/Setswana).
 - Layers: `app/routes` (HTTP) → `app/api` (use-cases) → `app/services` (rules + SQL) · `app/core` (config, auth middleware, validation, logging).
-- Auth: youth JWT for `/me/*`; admin `X-API-Key` for everything else non-public.
+- Auth: youth JWT for `/me/*`, business JWT for `/biz/*`, staff accounts with roles for everything else (shared `X-API-Key` = emergency admin).
 - Docs: `docs/AUDIT_2026-10-12.md` (findings + plan).
-- Staff console: sign in with the admin key on the landing page (queue, businesses → suggested jobs, jobs, youth, field audit).
+- Staff console: sign in with your staff email and password (tabs depend on role). See `SECURITY.md`, `docs/HEALTH.md`, `docs/OPERATIONS.md`, `.env.example`.
 
 ## Run
     pip install -r requirements.txt

@@ -85,7 +85,7 @@ def burn_verification_time(password):
     verify_password(password if isinstance(password, str) else "", _dummy_hash)
 
 
-def create_access_token(subject_id, role="youth"):
+def create_access_token(subject_id, role="youth", claims=None, lifetime=None):
     if not JWT_SECRET:
         raise RuntimeError("BSTM_JWT_SECRET is not set — cannot issue tokens.")
 
@@ -95,8 +95,10 @@ def create_access_token(subject_id, role="youth"):
         "role": role,
         "iss": JWT_ISSUER,
         "iat": now,
-        "exp": now + TOKEN_LIFETIME,
+        "exp": now + (lifetime or TOKEN_LIFETIME),
     }
+    if claims:
+        payload.update(claims)
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
@@ -123,3 +125,20 @@ def decode_access_token(token, role="youth"):
         return payload.get("sub")
     except jwt.InvalidTokenError:
         return None
+
+
+def decode_token_payload(token, role):
+    """Like decode_access_token but returns the whole claim set (or None)."""
+
+    if not JWT_SECRET:
+        raise RuntimeError("BSTM_JWT_SECRET is not set — cannot verify tokens.")
+
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], issuer=JWT_ISSUER)
+    except jwt.InvalidTokenError:
+        return None
+
+    return payload if payload.get("role", "youth") == role and payload.get("sub") else None

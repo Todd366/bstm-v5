@@ -20,7 +20,9 @@ from app.services.assignment_service import (
     list_opportunity_assignments,
     list_youth_assignments,
 )
-from app.services import notification_service, payment_service
+from datetime import timedelta
+
+from app.services import notification_service, payment_service, privacy_service, reset_service, scorecard_service, staff_service
 from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
 from app.services.brief_service import get_brief
@@ -690,8 +692,8 @@ def read_biz_notifications(business_id):
 
 # ---------- finance + approvals (admin) ----------
 
-def decide_opportunity(opportunity_id, data):
-    return set_opportunity_approval(opportunity_id, data["approved"], data.get("note"))
+def decide_opportunity(opportunity_id, data, by=None):
+    return set_opportunity_approval(opportunity_id, data["approved"], data.get("note"), decided_by=by)
 
 
 def get_invoices(status=None, limit=50, offset=0):
@@ -702,20 +704,20 @@ def get_payments(status=None, limit=50, offset=0):
     return payment_service.list_payments(status, limit, offset)
 
 
-def confirm_payment(payment_id):
-    return {"status": "confirmed", "id": payment_service.confirm_payment(payment_id)}
+def confirm_payment(payment_id, by="staff"):
+    return {"status": "confirmed", "id": payment_service.confirm_payment(payment_id, confirmed_by=by)}
 
 
-def reject_payment(payment_id, data):
-    return {"status": "rejected", "id": payment_service.reject_payment(payment_id, data.get("note"))}
+def reject_payment(payment_id, data, by="staff"):
+    return {"status": "rejected", "id": payment_service.reject_payment(payment_id, data.get("note"), rejected_by=by)}
 
 
 def get_payouts(status=None, limit=50, offset=0):
     return payment_service.list_payouts(status, None, limit, offset)
 
 
-def pay_out(payout_id, data):
-    return {"status": "paid", "id": payment_service.mark_payout_paid(payout_id, data["provider_ref"])}
+def pay_out(payout_id, data, by="staff"):
+    return {"status": "paid", "id": payment_service.mark_payout_paid(payout_id, data["provider_ref"], paid_by=by)}
 
 
 def fail_payout(payout_id, data=None):
@@ -744,3 +746,63 @@ def run_migrations():
     except RuntimeError as exc:
         from app.core.errors import Conflict
         raise Conflict(str(exc))
+
+
+# ---------- staff accounts, resets, privacy, health ----------
+
+STAFF_TOKEN_HOURS = 12
+
+
+def login_staff(data):
+    staff = staff_service.authenticate_staff(data["email"], data["password"])
+    return {
+        "status": "authenticated",
+        "access_token": create_access_token(staff["id"], role="staff", lifetime=timedelta(hours=STAFF_TOKEN_HOURS)),
+        "token_type": "bearer",
+        "name": staff["name"],
+        "role": staff["role"],
+    }
+
+
+def whoami(actor, role):
+    return {"name": actor, "role": role}
+
+
+def add_staff(data):
+    return {"status": "created", "id": staff_service.create_staff(data["name"], data["email"], data["password"], data["role"])}
+
+
+def get_staff():
+    return staff_service.list_staff()
+
+
+def set_staff_active(staff_id, active, acting_id=None):
+    return staff_service.set_staff_active(staff_id, active, acting_id)
+
+
+def issue_reset_code(data, by="staff"):
+    return reset_service.create_reset_code(data["account_type"], data["email"], created_by=by)
+
+
+def get_open_resets():
+    return reset_service.list_open_resets()
+
+
+def redeem_reset(data):
+    return reset_service.redeem_reset_code(data["account_type"], data["email"], data["code"], data["new_password"])
+
+
+def void_invoice(invoice_id, data, by="staff"):
+    return {"status": "void", "id": payment_service.void_invoice(invoice_id, data["reason"], voided_by=by)}
+
+
+def get_scorecard():
+    return scorecard_service.scorecard()
+
+
+def export_my_data(youth_id):
+    return privacy_service.export_youth(youth_id)
+
+
+def delete_my_account(youth_id, data):
+    return privacy_service.delete_youth(youth_id, data["password"])

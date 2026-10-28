@@ -3,9 +3,10 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), tabs = $("tabs"), banner = $("banner");
-  var S = { atab: "queue", btab: "bjobs", me: "profile", adminKey: null, token: null, btoken: null, lang: "en", tab: "home", profile: null, caps: null, depts: null };
+  var S = { atab: "queue", btab: "bjobs", me: "profile", adminKey: null, staffToken: null, staffRole: null, staffName: null, token: null, btoken: null, lang: "en", tab: "home", profile: null, caps: null, depts: null };
 
-  try { S.adminKey = sessionStorage.getItem("bstm_admin"); } catch (e) {}
+  try { S.adminKey = sessionStorage.getItem("bstm_admin"); S.staffToken = sessionStorage.getItem("bstm_staff"); S.staffRole = sessionStorage.getItem("bstm_srole"); S.staffName = sessionStorage.getItem("bstm_sname"); } catch (e) {}
+  function isStaff() { return !!(S.adminKey || S.staffToken); }
   try { S.token = localStorage.getItem("bstm_token"); S.btoken = localStorage.getItem("bstm_btoken"); S.lang = localStorage.getItem("bstm_lang") || "en"; } catch (e) {}
   function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 
@@ -57,7 +58,7 @@
     if (opt.body) headers["Content-Type"] = "application/json";
     if (opt.headers) for (var hk in opt.headers) headers[hk] = opt.headers[hk];
     var tok = path.indexOf("/biz") === 0 ? S.btoken : S.token;
-    if (opt.admin) headers["X-API-Key"] = S.adminKey;
+    if (opt.admin) { if (S.staffToken) headers.Authorization = "Bearer " + S.staffToken; else headers["X-API-Key"] = S.adminKey; }
     else if (tok && !opt.anon) headers.Authorization = "Bearer " + tok;
     var ctl = typeof AbortController === "function" ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
@@ -81,7 +82,8 @@
     });
   }
   function fail(e) {
-    if (S.adminKey && e && (e.status === 401 || e.status === 403)) { adminLogout(); say("Staff key was not accepted.", true); return; }
+    if (isStaff() && e && e.status === 403) { say("Your role is not allowed to do that.", true); return; }
+    if (isStaff() && e && e.status === 401) { adminLogout(); say("Please sign in again.", true); return; }
     if (e && e.status === 401 && S.btoken && !S.token) { logout(true); return; }
     if (e && e.status === 401 && S.token) { logout(true); return; }
     say(e && e.message || "Something went wrong.", true);
@@ -158,6 +160,7 @@
     show(h("div", null, form,
       h("div", { class: "card" }, h("p", { text: "New here?" }),
         h("button", { class: "btn sec", type: "button", text: t("Create account"), onclick: registerScreen }),
+        h("button", { class: "btn sec", type: "button", text: "Forgot password?", onclick: function () { resetScreen("youth"); } }),
         h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }))));
   }
 
@@ -308,12 +311,14 @@
 
   // ---------- app shell ----------
   var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["money", "💰", "Money"], ["me", "👤", "Me"]];
-  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"]];
+  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["sys", "✅", "System"]];
+  var AROLE = { admin: null, finance: ["queue", "money"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
+  function atabAllowed(k) { if (S.adminKey && !S.staffToken) return k !== "sys" || true; var r = AROLE[S.staffRole]; return r === undefined ? false : (r === null || r.indexOf(k) >= 0); }
   var BTABS = [["bjobs", "💼", "Jobs"], ["bpost", "➕", "Post a job"], ["binv", "🧾", "Invoices"]];
   function drawTabs() {
-    clear(tabs); tabs.hidden = !S.token && !S.adminKey && !S.btoken;
-    if (S.adminKey) {
-      ATABS.forEach(function (x) {
+    clear(tabs); tabs.hidden = !S.token && !isStaff() && !S.btoken;
+    if (isStaff()) {
+      ATABS.filter(function (x) { return atabAllowed(x[0]); }).forEach(function (x) {
         tabs.appendChild(h("button", { type: "button", "aria-current": S.atab === x[0] ? "page" : null, onclick: function () { S.atab = x[0]; route(); } }, h("i", { text: x[1] }), x[2]));
       });
       return;
@@ -333,11 +338,11 @@
     me: function () { return ({ profile: profileView, skills: skillsView, proof: proofView }[S.me] || profileView)(); } };
 
   function route() {
-    $("outBtn").hidden = !S.token && !S.adminKey && !S.btoken; $("outBtn").textContent = t("Log out"); $("langBtn").textContent = t("Setswana");
+    $("outBtn").hidden = !S.token && !isStaff() && !S.btoken; $("outBtn").textContent = t("Log out"); $("langBtn").textContent = t("Setswana");
     drawTabs();
     var pm = /^#\/p\/([0-9a-fA-F-]{36})$/.exec(location.hash || "");
     if (pm) return publicProfileView(pm[1]);
-    if (S.adminKey) { $("who").textContent = "Staff"; $("outBtn").hidden = false; return adminRoute(); }
+    if (isStaff()) { $("who").textContent = S.staffName || "Staff"; $("outBtn").hidden = false; return adminRoute(); }
     if (S.btoken) { $("who").textContent = ""; bell(0); refreshBell(); return bizRoute(); }
     if (!S.token) { $("who").textContent = ""; bell(0); return landing(); }
     show(h("div", { class: "spin", text: t("Loading…") }));
@@ -596,6 +601,22 @@
         busy(f.querySelector("button[type=submit]"), api("/me/profile", { method: "PUT", body: body })).then(function () { say("Profile saved."); route(); }).catch(function (x) { err.textContent = x.message; });
       });
       var node = h("div", null, subNav("profile"), f);
+      var dpw = h("input", { type: "password", autocomplete: "current-password", maxlength: 128, "aria-label": "Your password", placeholder: "Your password" });
+      var dErr = h("p", { class: "err", role: "alert" });
+      node.appendChild(h("div", { class: "card" }, h("h3", { text: "Your data" }),
+        h("p", { class: "m", text: "Download everything we hold about you, or delete your account. Deleting removes your personal details. Money records stay for the business." }),
+        h("button", { class: "btn sm sec", type: "button", text: "Download my data", onclick: function () {
+          api("/me/export").then(function (d) {
+            var a = h("a", { href: URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: "application/json" })), download: "my-bstm-data.json" });
+            document.body.appendChild(a); a.click(); a.remove();
+          }).catch(fail);
+        } }),
+        dpw, dErr,
+        h("button", { class: "btn sm sec", type: "button", text: "Delete my account", onclick: function () {
+          dErr.textContent = ""; if (!dpw.value) return (dErr.textContent = "Enter your password to confirm.");
+          if (!window.confirm("Delete your account? This cannot be undone.")) return;
+          api("/me/delete", { method: "POST", body: { password: dpw.value } }).then(function () { logout(false); say("Account deleted."); }).catch(function (e) { dErr.textContent = e.message; });
+        } })));
       if (p.public_profile) {
         var link = location.origin + "/#/p/" + p.id;
         node.appendChild(h("div", { class: "card" }, h("h3", { text: "Your public link" }), h("p", { class: "m", text: link }),
@@ -674,11 +695,25 @@
     show(f);
   }
 
+  function resetScreen(type) {
+    var err = h("p", { class: "err", role: "alert" });
+    var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Forgot password" }),
+      h("p", { class: "m", text: "Ask BSTM for a reset code (call or message us). We will check it is you and give you a code. Then enter it here." }),
+      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Code from BSTM", "code", "text", { max: 20, ac: "off" }),
+      field("New password (12+ characters)", "password", "password", { ac: "new-password", max: 128 }), err,
+      h("button", { class: "btn", type: "submit", text: "Set new password" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: type === "youth" ? loginScreen : bizLoginScreen }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      busy(f.querySelector("button[type=submit]"), api("/auth/reset", { anon: true, body: { account_type: type, email: val(f, "email"), code: val(f, "code"), new_password: f.querySelector("[name=password]").value } }))
+        .then(function () { say("Password changed. Please log in."); (type === "youth" ? loginScreen : bizLoginScreen)(); }).catch(function (e) { err.textContent = e.message; });
+    });
+    show(f);
+  }
   function bizLoginScreen() {
     var err = h("p", { class: "err", role: "alert" });
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Log in as business") }),
       field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), err,
-      h("button", { class: "btn", type: "submit", text: t("Log in") }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
+      h("button", { class: "btn", type: "submit", text: t("Log in") }), h("button", { class: "btn sec", type: "button", text: "Forgot password?", onclick: function () { resetScreen("business"); } }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";
       busy(f.querySelector("button[type=submit]"), api("/businesses/login", { anon: true, body: { email: val(f, "email"), password: f.querySelector("[name=password]").value } }))
@@ -803,19 +838,35 @@
   // ---------- staff console ----------
   function staffLogin() {
     var err = h("p", { class: "err", role: "alert" });
+    var keyBox = h("div", { hidden: true }, field("Staff key (emergency only)", "key", "password", { ac: "off", max: 200 }));
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Staff sign in" }),
-      field("Staff key", "key", "password", { ac: "off", max: 200 }), err,
-      h("button", { class: "btn", type: "submit", text: t("Log in") }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
+      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), keyBox, err,
+      h("button", { class: "btn", type: "submit", text: t("Log in") }),
+      h("button", { class: "btn sec", type: "button", text: "Use the staff key instead", onclick: function () { keyBox.hidden = !keyBox.hidden; } }),
+      h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
+    function keep(r) {
+      try { sessionStorage.removeItem("bstm_admin"); if (r) { sessionStorage.setItem("bstm_staff", r.token); sessionStorage.setItem("bstm_srole", r.role); sessionStorage.setItem("bstm_sname", r.name); } else sessionStorage.setItem("bstm_admin", S.adminKey); } catch (e) {}
+    }
     f.addEventListener("submit", function (ev) {
-      ev.preventDefault(); S.adminKey = f.querySelector("[name=key]").value.trim();
-      busy(f.querySelector("button[type=submit]"), api("/admin/stats", { admin: true })).then(function () {
-        try { sessionStorage.setItem("bstm_admin", S.adminKey); } catch (e) {}
-        route();
-      }).catch(function (e) { S.adminKey = null; err.textContent = e.status === 401 || e.status === 403 ? "That key was not accepted." : e.message; });
+      ev.preventDefault(); err.textContent = "";
+      var btn = f.querySelector("button[type=submit]");
+      if (!keyBox.hidden && val(f, "key")) {
+        S.adminKey = val(f, "key"); S.staffToken = null; S.staffRole = "admin"; S.staffName = "Admin key";
+        return busy(btn, api("/admin/stats", { admin: true })).then(function () { keep(null); route(); })
+          .catch(function (e) { S.adminKey = null; err.textContent = e.status === 401 || e.status === 403 ? "That key was not accepted." : e.message; });
+      }
+      busy(btn, api("/staff/login", { anon: true, body: { email: val(f, "email"), password: f.querySelector("[name=password]").value } })).then(function (r) {
+        S.staffToken = r.access_token; S.staffRole = r.role; S.staffName = r.name; S.adminKey = null; S.atab = "queue";
+        keep({ token: r.access_token, role: r.role, name: r.name }); route();
+      }).catch(function (e) { err.textContent = e.message; });
     });
     show(f);
   }
-  function adminLogout() { S.adminKey = null; S.migOk = false; try { sessionStorage.removeItem("bstm_admin"); } catch (e) {} route(); }
+  function adminLogout() {
+    S.adminKey = null; S.staffToken = null; S.staffRole = null; S.staffName = null; S.migOk = false;
+    try { ["bstm_admin", "bstm_staff", "bstm_srole", "bstm_sname"].forEach(function (k) { sessionStorage.removeItem(k); }); } catch (e) {}
+    route();
+  }
   var A = function (path, body) { return api(path, { admin: true, method: body !== undefined ? "POST" : "GET", body: body !== undefined ? body : undefined }); };
   function aact(card, label, path, body, cls, ok) {
     var b = h("button", { class: "btn sm " + (cls || ""), type: "button", text: label });
@@ -836,15 +887,68 @@
       h("button", { class: "btn sec", type: "button", text: "Skip for now", onclick: function () { S.migOk = true; route(); } })));
   }
   function adminRoute() {
+    if (!S.migOk && S.staffRole !== "admin") S.migOk = true;
     if (!S.migOk) {
       show(h("div", { class: "spin", text: t("Loading…") }));
       return A("/admin/migrations").then(function (m) { if (m && m.pending && m.pending.length) return migrateScreen(m); S.migOk = true; route(); },
         function () { S.migOk = true; route(); });
     }
     show(h("div", { class: "spin", text: t("Loading…") }));
-    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit }[S.atab] || aQueue)().catch(function (e) {
+    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, sys: aSys }[S.atab] || aQueue)().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);
       show(h("div", { class: "card empty" }, h("p", { text: e.message }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
+    });
+  }
+  function aReset() {
+    var err = h("p", { class: "err", role: "alert" }), shown = h("div");
+    var type = h("select", { "aria-label": "Account type" }, h("option", { value: "youth", text: "Youth" }), h("option", { value: "business", text: "Business" }));
+    var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Password reset code" }),
+      h("p", { class: "m", text: "First confirm the person is who they say (phone call or in person). Then create a code and tell it to them." }),
+      type, field("Their email", "email", "email", { max: 254, im: "email" }), err, h("button", { class: "btn", type: "submit", text: "Create code" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      busy(f.querySelector("button"), A("/admin/resets", { account_type: type.value, email: val(f, "email") })).then(function (r) {
+        clear(shown); shown.appendChild(h("div", { class: "card" }, h("h3", { text: "Code (shown once)" }), h("p", { style: "font-size:2rem;letter-spacing:.2em;font-weight:700", text: r.code }),
+          h("p", { class: "m", text: "Valid for " + r.expires_in_hours + " hours. They open Log in, then Forgot password." })));
+      }).catch(function (e) { err.textContent = e.message; });
+    });
+    return A("/admin/resets").then(function (list) {
+      var node = h("div", null, h("h1", { text: "Resets" }), f, shown, h("h2", { text: "Open codes (" + list.length + ")" }));
+      if (!list.length) node.appendChild(empty("No open codes."));
+      list.forEach(function (r) { node.appendChild(h("div", { class: "card" }, h("p", { text: r.email + " (" + r.account_type + ")" }), h("p", { class: "m", text: "by " + r.created_by + " · expires " + when(r.expires_at) }))); });
+      show(node);
+    });
+  }
+  function aTeam() {
+    return A("/admin/staff").then(function (list) {
+      var err = h("p", { class: "err", role: "alert" });
+      var role = h("select", { "aria-label": "Role" }, ["finance", "field", "support", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
+      var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Add a team member" }),
+        h("p", { class: "m", text: "finance: money. field: jobs, trials, audits. support: resets and viewing people. admin: everything." }),
+        field("Name", "name", "text", { max: 120 }), field("Email", "email", "email", { max: 254, im: "email" }), field("Password (12+ characters)", "password", "password", { ac: "new-password", max: 128 }), role, err,
+        h("button", { class: "btn", type: "submit", text: "Add" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        busy(f.querySelector("button"), A("/admin/staff", { name: val(f, "name"), email: val(f, "email"), password: f.querySelector("[name=password]").value, role: role.value }))
+          .then(function () { say("Team member added."); route(); }).catch(function (e) { err.textContent = e.message; });
+      });
+      var node = h("div", null, h("h1", { text: "Team" }), f);
+      list.forEach(function (m) {
+        var card = h("div", { class: "card" }, h("h3", { text: m.name }), h("p", { class: "m", text: m.email + " · last in " + (m.last_login_at ? when(m.last_login_at) : "never") }),
+          h("p", null, h("span", { class: "tag", text: m.role }), h("span", { class: "tag " + (m.active ? "ok" : "warn"), text: m.active ? "Active" : "Off" })));
+        aact(card, m.active ? "Turn off" : "Turn on", "/admin/staff/" + m.id + "/active", { active: !m.active }, "sec", "Saved.");
+        node.appendChild(card);
+      });
+      show(node);
+    });
+  }
+  function aSys() {
+    return A("/admin/scorecard").then(function (r) {
+      var node = h("div", null, h("h1", { text: "System check" }), h("p", { class: "m", text: "Each line was measured just now." }));
+      r.checks.forEach(function (c) {
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: c.name }), h("p", null, h("span", { class: "tag " + (c.status === "OK" ? "ok" : "warn"), text: c.status }), " " + c.detail)));
+      });
+      show(node);
     });
   }
   function safeLink(u) { return u && /^https?:\/\//i.test(u) ? h("a", { href: u, target: "_blank", rel: "noopener noreferrer nofollow", text: "Open link" }) : null; }
@@ -970,6 +1074,14 @@
               .then(function () { say("Recorded. Confirm it in the Queue."); route(); }).catch(fail);
           });
           card.appendChild(m); card.appendChild(ref); card.appendChild(b);
+        }
+        if (i.status === "Issued" && Number(i.pending_payments) === 0 && Number(i.paid_amount) === 0) {
+          var vb = h("button", { class: "btn sm sec", type: "button", text: "Cancel invoice" });
+          vb.addEventListener("click", function () {
+            var reason = window.prompt("Why is this invoice being cancelled?"); if (!reason || !reason.trim()) return;
+            busy(vb, A("/invoices/" + i.id + "/void", { reason: reason.trim() })).then(function () { say("Invoice cancelled."); route(); }).catch(fail);
+          });
+          card.appendChild(vb);
         }
         node.appendChild(card);
       });
@@ -1140,7 +1252,7 @@
   }
 
   // ---------- boot ----------
-  $("outBtn").addEventListener("click", function () { if (S.adminKey) adminLogout(); else logout(false); });
+  $("outBtn").addEventListener("click", function () { if (isStaff()) adminLogout(); else logout(false); });
   $("langBtn").addEventListener("click", function () { S.lang = S.lang === "en" ? "tn" : "en"; store("bstm_lang", S.lang); document.documentElement.lang = S.lang; route(); });
   $("bellBtn").addEventListener("click", function () { if (S.btoken) S.btab = "alerts"; else S.tab = "alerts"; route(); });
   window.addEventListener("hashchange", route);

@@ -73,6 +73,8 @@ def _test_schema():
 
 _TABLES = [
     "rate_limit_events",
+    "password_resets",
+    "staff",
     "field_audits",
     "notifications",
     "unmatched_payments",

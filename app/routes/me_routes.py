@@ -5,6 +5,8 @@ the id comes from the token, never from the URL."""
 from fastapi import APIRouter, Query, Request
 
 from app.api.service import (
+    delete_my_account,
+    export_my_data,
     accept_my_assignment,
     apply_to_opportunity,
     browse_my_opportunities,
@@ -32,6 +34,7 @@ from app.api.service import (
 )
 from app.routes.common import service_call, youth_id_of
 from app.schemas.models import (
+    DeleteAccount,
     CapabilityAssign,
     PayoutAccountSet,
     ProfileUpdate,
@@ -168,3 +171,13 @@ def notifications(request: Request):
 @router.post("/notifications/read")
 def notifications_read(request: Request):
     return service_call(read_my_notifications, youth_id_of(request))
+
+
+@router.get("/export")
+def export(request: Request):
+    return service_call(export_my_data, youth_id_of(request))
+
+
+@router.post("/delete")
+def delete_account(payload: DeleteAccount, request: Request):
+    return service_call(delete_my_account, youth_id_of(request), payload.dict())

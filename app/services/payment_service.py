@@ -640,3 +640,39 @@ def youth_earnings(youth_id):
         ).fetchall()
 
     return {"totals": dict(totals), "payouts": [dict(p) for p in payouts]}
+
+
+def void_invoice(invoice_id, reason, voided_by="staff"):
+    """Cancels a wrong or disputed invoice. Refused once money has been
+    confirmed against it or a payment is awaiting review, so the ledger
+    never loses track of money that really arrived."""
+
+    invoice_id = require_uuid(invoice_id, "Invoice")
+    reason = clean_text(reason, "Reason", 300)
+
+    with transaction() as db:
+        invoice = db.execute(
+            "SELECT id, reference, business_id, status FROM invoices WHERE id = ? FOR UPDATE", (invoice_id,)
+        ).fetchone()
+
+        if not invoice:
+            raise ValueError("Invoice not found")
+
+        if invoice["status"] != "Issued":
+            raise Conflict("Only an unpaid invoice can be voided")
+
+        live = db.execute(
+            "SELECT count(*) AS n FROM payments WHERE invoice_id = ? AND status IN ('Submitted', 'Confirmed')",
+            (invoice_id,),
+        ).fetchone()["n"]
+
+        if live:
+            raise Conflict("This invoice has payments recorded. Reject them first, or refund outside the app.")
+
+        db.execute("UPDATE invoices SET status = 'Void' WHERE id = ?", (invoice_id,))
+        _log(db, "invoice_voided", invoice["business_id"], invoice_id,
+             {"invoice": invoice["reference"], "reason": reason, "by": voided_by})
+        notify(db, "business", invoice["business_id"], "invoice_voided", "Invoice cancelled",
+               invoice["reference"] + " was cancelled by BSTM. Reason: " + reason)
+
+    return str(invoice_id)

@@ -180,3 +180,39 @@ class FieldAuditCreate(BaseModel):
     rooms: Optional[List[int]] = None
     insight: Optional[str] = Field(None, max_length=1000)
     score: int = 5
+
+
+class StaffLogin(BaseModel):
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+
+
+class StaffCreate(BaseModel):
+    name: str = Field(..., max_length=120)
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+    role: str = Field(..., max_length=20)
+
+
+class StaffActive(BaseModel):
+    active: bool
+
+
+class ResetIssue(BaseModel):
+    account_type: str = Field(..., max_length=20)
+    email: str = Field(..., max_length=254)
+
+
+class ResetRedeem(BaseModel):
+    account_type: str = Field(..., max_length=20)
+    email: str = Field(..., max_length=254)
+    code: str = Field(..., max_length=20)
+    new_password: str = Field(..., max_length=128)
+
+
+class VoidInvoice(BaseModel):
+    reason: str = Field(..., max_length=300)
+
+
+class DeleteAccount(BaseModel):
+    password: str = Field(..., max_length=128)

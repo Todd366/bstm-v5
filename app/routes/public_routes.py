@@ -13,12 +13,14 @@ from app.api.service import (
     get_department_list,
     ingest_provider_event,
     login_business,
+    login_staff,
+    redeem_reset,
     login_youth,
     view_public_profile,
 )
 from app.core.health import liveness
 from app.routes.common import service_call
-from app.schemas.models import BusinessCreate, BusinessLogin, YouthCreate, YouthLogin
+from app.schemas.models import BusinessCreate, BusinessLogin, ResetRedeem, StaffLogin, YouthCreate, YouthLogin
 
 router = APIRouter()
 
@@ -106,6 +108,16 @@ def register_business(payload: BusinessCreate):
 @router.post("/businesses/login")
 def login_biz(payload: BusinessLogin):
     return service_call(login_business, payload.dict())
+
+
+@router.post("/staff/login")
+def login_staff_route(payload: StaffLogin):
+    return service_call(login_staff, payload.dict())
+
+
+@router.post("/auth/reset")
+def reset_password(payload: ResetRedeem):
+    return service_call(redeem_reset, payload.dict())
 
 
 @router.get("/public/profiles/{youth_id}")

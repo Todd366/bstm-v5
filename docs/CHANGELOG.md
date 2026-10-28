@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.5.0
+- Staff accounts with roles (admin, finance, field, support); shared key kept as emergency admin.
+- Money and approval actions record who did them.
+- Staff-issued password reset codes for youth and businesses ("Forgot password?").
+- Cancel (void) an unpaid invoice.
+- Members can download their data and delete their account.
+- System check (Staff -> System) measures setup and ledger health.
+- Removed old prototype files (`bstm_activation*.py`, `repair_bstm.py`, `data/`).
+- Migration `20261021000000_staff_resets_privacy.sql` (apply via Staff -> Update database).
+
 ## v5.4.0 — 2026-10-17
 **Money loop and every role's screens.** Evidence labels: backend VERIFIED by 120 tests on PG16; frontend VERIFIED by a real-Chromium smoke test against a mocked API (tests/e2e/smoke.mjs); FastAPI route layer and production behaviour UNASSESSED (never run).
 - Approved work completes the job and issues the invoice in one transaction (`complete_trial`). A job can no longer be completed or invoiced without approved work.

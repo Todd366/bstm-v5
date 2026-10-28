@@ -10,7 +10,8 @@ Auth tiers
   public     static files, /health, docs, catalog, and a few self-service
              writes (register, login, business register) — rate limited.
   youth JWT  everything under /me.
-  admin key  everything else (X-API-Key).
+  staff      everything else: a staff Bearer token (role-limited, see
+             app.core.permissions) or the break-glass X-API-Key (admin).
 """
 
 import asyncio
@@ -29,7 +30,9 @@ from app.core.config import (
     RATE_REGISTER_PER_HOUR,
 )
 from app.core.errors import RateLimitExceeded
-from app.services.auth_service import decode_access_token
+from app.core.permissions import allowed_roles
+from app.services.auth_service import decode_access_token, decode_token_payload
+from app.services.staff_service import lookup_active_staff
 from app.services.rate_limit_service import check_rate_limit
 
 logger = logging.getLogger("bstm")
@@ -56,6 +59,8 @@ PUBLIC_WRITES = {
     ("POST", "/businesses"): ("register-business", RATE_REGISTER_PER_HOUR),
     ("POST", "/youth/login"): ("login", RATE_LOGIN_PER_HOUR_IP),
     ("POST", "/businesses/login"): ("login-business", RATE_LOGIN_PER_HOUR_IP),
+    ("POST", "/staff/login"): ("login-staff", RATE_LOGIN_PER_HOUR_IP),
+    ("POST", "/auth/reset"): ("reset", RATE_LOGIN_PER_HOUR_IP),
 }
 
 # Public by prefix. Webhooks authenticate by HMAC signature inside the
@@ -211,18 +216,7 @@ class AuthAndLoggingMiddleware:
         is_public_get = method == "GET" and path.startswith(PUBLIC_GET_PREFIXES)
 
         if rule is None and path not in PUBLIC_PATHS and not is_public_get:
-            if not API_KEY:
-                # Fail closed: an unset key is a misconfiguration, not
-                # "no auth needed".
-                return _json(500, "Server misconfigured: BSTM_API_KEY is not set.", request_id)
-
-            provided = headers.get("x-api-key", "")
-
-            if not secrets.compare_digest(provided.encode("utf-8"), API_KEY.encode("utf-8")):
-                return _json(401, "Missing or invalid API key.", request_id)
-
-            state["is_admin"] = True
-            return None
+            return await self._staff_guard(headers, method, path, state, request_id)
 
         if rule is not None:
             endpoint, limit = rule
@@ -250,3 +244,45 @@ class AuthAndLoggingMiddleware:
             state["is_admin"] = True
 
         return None
+
+
+    async def _staff_guard(self, headers, method, path, state, request_id):
+        """Staff tier: break-glass API key (admin) or an individual staff
+        token limited to its role. A deactivated account stops working at
+        once because the account is re-checked on every request."""
+
+        provided = headers.get("x-api-key", "")
+
+        if provided:
+            if API_KEY and secrets.compare_digest(provided.encode("utf-8"), API_KEY.encode("utf-8")):
+                state.update(is_admin=True, actor="admin-key", staff_role="admin", staff_id=None)
+                return None
+            return _json(401, "Missing or invalid credentials.", request_id)
+
+        token = _bearer(headers)
+
+        if token:
+            try:
+                payload = decode_token_payload(token, "staff")
+            except RuntimeError:
+                return _json(500, "Server misconfigured: BSTM_JWT_SECRET is not set.", request_id)
+
+            if payload:
+                try:
+                    staff = await asyncio.to_thread(lookup_active_staff, payload["sub"])
+                except Exception:
+                    logger.warning("staff lookup failed", exc_info=True, extra={"request_id": request_id})
+                    return _json(503, "Service temporarily unavailable.", request_id)
+
+                if staff:
+                    if staff["role"] not in allowed_roles(method, path):
+                        return _json(403, "Your role is not allowed to do this.", request_id)
+
+                    state.update(is_admin=staff["role"] == "admin", actor=staff["name"],
+                                 staff_role=staff["role"], staff_id=payload["sub"])
+                    return None
+
+        if not API_KEY and not token:
+            return _json(500, "Server misconfigured: BSTM_API_KEY is not set.", request_id)
+
+        return _json(401, "Missing or invalid credentials.", request_id)

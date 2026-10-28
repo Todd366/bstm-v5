@@ -1,8 +1,16 @@
 """Admin routes: guarded by the X-API-Key header (middleware)."""
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, Request
 
 from app.api.service import (
+    add_staff,
+    get_open_resets,
+    get_scorecard,
+    get_staff,
+    issue_reset_code,
+    set_staff_active,
+    void_invoice,
+    whoami,
     get_migration_status,
     run_migrations,
     get_unmatched,
@@ -63,6 +71,10 @@ from app.api.service import (
 )
 from app.routes.common import service_call
 from app.schemas.models import (
+    ResetIssue,
+    StaffActive,
+    StaffCreate,
+    VoidInvoice,
     ApprovalDecision,
     PaymentReject,
     PaymentSubmit,
@@ -84,6 +96,11 @@ from app.schemas.models import (
 )
 
 router = APIRouter(tags=["admin"])
+
+
+def _actor(request):
+    """Who is acting: a staff member's name, or "admin-key" for the shared key."""
+    return getattr(request.state, "actor", None) or "staff"
 
 
 @router.get("/admin/stats")
@@ -330,8 +347,8 @@ def evidence_submit(payload: EvidenceSubmit):
 # ----- approvals and finance -----
 
 @router.post("/opportunities/{opportunity_id}/approval")
-def opportunity_approval(opportunity_id: str, payload: ApprovalDecision):
-    return service_call(decide_opportunity, opportunity_id, payload.dict())
+def opportunity_approval(opportunity_id: str, payload: ApprovalDecision, request: Request):
+    return service_call(decide_opportunity, opportunity_id, payload.dict(), _actor(request))
 
 
 @router.get("/invoices")
@@ -353,13 +370,13 @@ def payment_list(
 
 
 @router.post("/payments/{payment_id}/confirm")
-def payment_confirm(payment_id: str):
-    return service_call(confirm_payment, payment_id)
+def payment_confirm(payment_id: str, request: Request):
+    return service_call(confirm_payment, payment_id, _actor(request))
 
 
 @router.post("/payments/{payment_id}/reject")
-def payment_reject(payment_id: str, payload: PaymentReject):
-    return service_call(reject_payment, payment_id, payload.dict())
+def payment_reject(payment_id: str, payload: PaymentReject, request: Request):
+    return service_call(reject_payment, payment_id, payload.dict(), _actor(request))
 
 
 @router.get("/payouts")
@@ -372,8 +389,8 @@ def payout_list(
 
 
 @router.post("/payouts/{payout_id}/paid")
-def payout_paid(payout_id: str, payload: PayoutPaid):
-    return service_call(pay_out, payout_id, payload.dict())
+def payout_paid(payout_id: str, payload: PayoutPaid, request: Request):
+    return service_call(pay_out, payout_id, payload.dict(), _actor(request))
 
 
 @router.post("/payouts/{payout_id}/fail")
@@ -407,3 +424,45 @@ def migrations_status():
 def migrations_apply():
     """Applies the SQL files bundled with this release. Admin key only."""
     return service_call(run_migrations)
+
+
+# ----- staff accounts, resets, system check -----
+
+@router.get("/admin/me")
+def admin_me(request: Request):
+    return {"name": _actor(request), "role": getattr(request.state, "staff_role", "admin")}
+
+
+@router.get("/admin/staff")
+def staff_list():
+    return service_call(get_staff)
+
+
+@router.post("/admin/staff", status_code=201)
+def staff_add(payload: StaffCreate):
+    return service_call(add_staff, payload.dict())
+
+
+@router.post("/admin/staff/{staff_id}/active")
+def staff_active(staff_id: str, payload: StaffActive, request: Request):
+    return service_call(set_staff_active, staff_id, payload.active, getattr(request.state, "staff_id", None))
+
+
+@router.get("/admin/resets")
+def resets_list():
+    return service_call(get_open_resets)
+
+
+@router.post("/admin/resets", status_code=201)
+def reset_issue(payload: ResetIssue, request: Request):
+    return service_call(issue_reset_code, payload.dict(), _actor(request))
+
+
+@router.get("/admin/scorecard")
+def scorecard():
+    return service_call(get_scorecard)
+
+
+@router.post("/invoices/{invoice_id}/void")
+def invoice_void(invoice_id: str, payload: VoidInvoice, request: Request):
+    return service_call(void_invoice, invoice_id, payload.dict(), _actor(request))

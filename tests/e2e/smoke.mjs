@@ -27,7 +27,7 @@ const ok = (b) => ({ status: 200, contentType: "application/json", body: JSON.st
 let migrated = false;
 const API = (m, u, h, body) => {
   const p = u.pathname;
-  seen.push({ m, p, q: u.search, key: h["idempotency-key"], body });
+  seen.push({ m, p, q: u.search, key: h["idempotency-key"], auth: h["authorization"], body });
   if (p === "/catalog/capabilities") return ok([{ id: "c1", name: "Web design", category: "Technology" }]);
   if (p === "/catalog/departments") return ok(["Web Development", "Music"]);
   if (p === "/youth/login") return ok({ access_token: "yt" });
@@ -56,6 +56,11 @@ const API = (m, u, h, body) => {
   if (p === "/biz/invoices" && m === "GET") return ok([{ id: "i1", reference: "BSTM-1000", amount: 500, paid_amount: 0, pending_payments: 0, status: "Issued", opportunity_title: "Paint wall", created_at: "2026-10-01T00:00:00Z" }]);
   if (p === "/biz/invoices/i1/payments") return ok({ status: "submitted", id: "pay1" });
   if (p === "/biz/notifications") return ok({ unread: 0, items: [] });
+  if (p === "/staff/login") return ok({ access_token: "st", token_type: "bearer", name: "Tau", role: "admin" });
+  if (p === "/admin/resets" && m === "GET") return ok([]);
+  if (p === "/admin/resets" && m === "POST") return ok({ code: "ABCD2345", expires_in_hours: 24 });
+  if (p === "/admin/staff" && m === "GET") return ok([{ id: "s1", name: "Tau", email: "tau@bstm.test", role: "admin", active: true, last_login_at: null }]);
+  if (p === "/admin/scorecard") return ok({ overall: "WARN", checks: [{ name: "Ledger balance", status: "OK", detail: "no invoice is over-paid" }] });
   if (p === "/admin/migrations") return ok({ applied: [], pending: migrated ? [] : ["20261016000000_ledger_notifications_accounts.sql"] });
   if (p === "/admin/migrations/apply") { migrated = true; return ok({ applied_now: ["20261016000000_ledger_notifications_accounts.sql"], pending: [] }); }
   if (p === "/admin/stats") return ok({ counts: { youth: 21, businesses: 3, opportunities: 4, trials: 2 } });
@@ -83,7 +88,7 @@ page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push("console: " + m.text()); });
 await page.route("**/*", async (route) => {
   const u = new URL(route.request().url());
-  if (u.origin !== base || !/^\/(catalog|youth|businesses|me|biz|admin|public|invoices|payments|payouts|opportunities|unmatched)/.test(u.pathname)) return route.continue();
+  if (u.origin !== base || !/^\/(catalog|youth|businesses|me|biz|admin|public|staff|auth|invoices|payments|payouts|opportunities|unmatched)/.test(u.pathname)) return route.continue();
   const r = route.request();
   let body = null; try { body = r.postData() ? JSON.parse(r.postData()) : null; } catch (e) {}
   await route.fulfill(API(r.method(), u, r.headers(), body));
@@ -162,7 +167,7 @@ await page.getByRole("button", { name: "Log out" }).click();
 // ---- staff
 await page.waitForSelector("text=Welcome to BSTM Activation");
 await click("Staff sign in");
-await page.fill("[name=key]", "k"); await page.locator("form button[type=submit]").click();
+await page.fill("[name=email]", "tau@bstm.test"); await page.fill("[name=password]", "correct-horse-battery"); await page.locator("form button[type=submit]").click();
 await page.waitForSelector("text=Database update needed");
 check("staff sees database update screen", await text("20261016000000"));
 await click("Update database now");
@@ -173,6 +178,15 @@ await click("Money received"); await page.waitForTimeout(300);
 check("confirm payment", seen.some((s) => s.p === "/payments/pay1/confirm"));
 await tab("Money"); await page.waitForSelector("text=BSTM-1000");
 check("staff money tab", (await text("Record a payment")) && (await text("Billed")));
+check("void button offered on unpaid invoice", await text("Cancel invoice"));
+check("staff signed in with token, not key", seen.some((s) => s.p === "/admin/stats" && s.auth === "Bearer st"));
+await tab("Resets"); await page.waitForSelector("text=Password reset code");
+await page.fill("[name=email]", "kid@example.com"); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD2345");
+check("reset code shown once", await text("Code (shown once)"));
+await tab("Team"); await page.waitForSelector("text=Add a team member");
+check("team lists staff", await text("tau@bstm.test"));
+await tab("System"); await page.waitForSelector("text=System check");
+check("system check lists measured items", await text("Ledger balance"));
 await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/staff.png" : "/tmp/staff.png" });
 
 check("no script or console errors", errors.length === 0);
