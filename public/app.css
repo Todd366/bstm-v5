@@ -19,8 +19,8 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{out
 .btn{display:block;width:100%;min-height:48px;margin-top:14px;border:0;border-radius:10px;background:var(--g);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 .btn:hover{background:var(--gd)}.btn.sec{background:transparent;color:var(--g);border:2px solid var(--g)}.btn.sm{display:inline-block;width:auto;padding:0 16px;margin:8px 8px 0 0;min-height:44px}
 .btn.dng{background:var(--r)}.btn[disabled]{opacity:.6}
-.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--c);border-top:1px solid var(--b);z-index:5}
-.tabs button{flex:1;min-height:60px;border:0;background:none;color:var(--m);font:inherit;font-size:.78rem;cursor:pointer;padding:6px 2px}
+.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:var(--c);border-top:1px solid var(--b);z-index:5}
+.tabs button{flex:1 0 auto;min-width:74px;min-height:60px;border:0;background:none;color:var(--m);font:inherit;font-size:.78rem;cursor:pointer;padding:6px 2px}
 .tabs button[aria-current=page]{color:var(--g);font-weight:700;border-top:3px solid var(--g)}
 .tabs i{display:block;font-style:normal;font-size:1.25rem}
 .chips{display:flex;flex-wrap:wrap;gap:8px}

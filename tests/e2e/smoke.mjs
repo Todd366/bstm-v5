@@ -56,11 +56,13 @@ const API = (m, u, h, body) => {
   if (p === "/biz/invoices" && m === "GET") return ok([{ id: "i1", reference: "BSTM-1000", amount: 500, paid_amount: 0, pending_payments: 0, status: "Issued", opportunity_title: "Paint wall", created_at: "2026-10-01T00:00:00Z" }]);
   if (p === "/biz/invoices/i1/payments") return ok({ status: "submitted", id: "pay1" });
   if (p === "/biz/notifications") return ok({ unread: 0, items: [] });
-  if (p === "/staff/login") return ok({ access_token: "st", token_type: "bearer", name: "Tau", role: "admin" });
+  if (p === "/staff/login") return ok({ access_token: "st", token_type: "bearer", name: "Tau", role: "owner" });
   if (p === "/admin/resets" && m === "GET") return ok([]);
   if (p === "/admin/resets" && m === "POST") return ok({ code: "ABCD2345", expires_in_hours: 24 });
   if (p === "/admin/staff" && m === "GET") return ok([{ id: "s1", name: "Tau", email: "tau@bstm.test", role: "admin", active: true, last_login_at: null }]);
   if (p === "/admin/scorecard") return ok({ overall: "WARN", checks: [{ name: "Ledger balance", status: "OK", detail: "no invoice is over-paid" }] });
+  if (p === "/admin/owner/records") return ok([{ id: "y1", name: "Auth Test User", email: "a@example.com", location: "Gaborone", can_login: true, jobs: 0, money_records: 0, suggested_test: ["name looks like a test"] }, { id: "y2", name: "Real Person", email: "r@gmail.com", location: "Maun", can_login: true, jobs: 1, money_records: 0, suggested_test: [] }]);
+  if (p === "/admin/owner/delete") return ok({ removed: ["y1"], kept_because_of_money: [] });
   if (p === "/admin/migrations") return ok({ applied: [], pending: migrated ? [] : ["20261016000000_ledger_notifications_accounts.sql"] });
   if (p === "/admin/migrations/apply") { migrated = true; return ok({ applied_now: ["20261016000000_ledger_notifications_accounts.sql"], pending: [] }); }
   if (p === "/admin/stats") return ok({ counts: { youth: 21, businesses: 3, opportunities: 4, trials: 2 } });
@@ -187,6 +189,12 @@ await tab("Team"); await page.waitForSelector("text=Add a team member");
 check("team lists staff", await text("tau@bstm.test"));
 await tab("System"); await page.waitForSelector("text=System check");
 check("system check lists measured items", await text("Ledger balance"));
+await tab("Owner"); await page.waitForSelector("text=1 look like tests");
+check("owner sees records, test one flagged", (await text("Auth Test User")) && (await text("name looks like a test")));
+await click("Tick all that look like tests");
+page.removeAllListeners("dialog"); page.once("dialog", (d) => d.accept("DELETE"));
+await click("Delete selected (1)"); await page.waitForTimeout(400);
+check("owner delete sent with confirm", seen.some((s) => s.p === "/admin/owner/delete" && s.body.confirm === "DELETE" && s.body.ids[0] === "y1"));
 await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/staff.png" : "/tmp/staff.png" });
 
 check("no script or console errors", errors.length === 0);

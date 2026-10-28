@@ -3,6 +3,9 @@
 from fastapi import APIRouter, Header, Query, Request
 
 from app.api.service import (
+    owner_delete,
+    owner_edit,
+    owner_records,
     add_staff,
     get_open_resets,
     get_scorecard,
@@ -71,6 +74,8 @@ from app.api.service import (
 )
 from app.routes.common import service_call
 from app.schemas.models import (
+    OwnerDelete,
+    OwnerEdit,
     ResetIssue,
     StaffActive,
     StaffCreate,
@@ -466,3 +471,20 @@ def scorecard():
 @router.post("/invoices/{invoice_id}/void")
 def invoice_void(invoice_id: str, payload: VoidInvoice, request: Request):
     return service_call(void_invoice, invoice_id, payload.dict(), _actor(request))
+
+
+# ----- owner only (see app.core.permissions: /admin/owner and /admin/staff) -----
+
+@router.get("/admin/owner/records")
+def owner_list(kind: str = Query(..., max_length=20)):
+    return service_call(owner_records, kind)
+
+
+@router.post("/admin/owner/delete")
+def owner_remove(payload: OwnerDelete, request: Request):
+    return service_call(owner_delete, payload.dict(), _actor(request))
+
+
+@router.put("/admin/owner/{kind}/{record_id}")
+def owner_update(kind: str, record_id: str, payload: OwnerEdit, request: Request):
+    return service_call(owner_edit, kind, record_id, payload.dict(), _actor(request))

@@ -237,6 +237,7 @@ def list_youth(limit=50, offset=0):
             f"""
             SELECT {_LIST_COLUMNS}
             FROM youth
+            WHERE deleted_at IS NULL
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
             """,

@@ -41,7 +41,7 @@ def system_health():
 
     with transaction() as db:
 
-        youth = db.execute("SELECT COUNT(*) AS count FROM youth").fetchone()["count"]
+        youth = db.execute("SELECT COUNT(*) AS count FROM youth WHERE deleted_at IS NULL").fetchone()["count"]
         businesses = db.execute(
             "SELECT COUNT(*) AS count FROM businesses"
         ).fetchone()["count"]

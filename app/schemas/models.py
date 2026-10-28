@@ -216,3 +216,28 @@ class VoidInvoice(BaseModel):
 
 class DeleteAccount(BaseModel):
     password: str = Field(..., max_length=128)
+
+
+class OwnerDelete(BaseModel):
+    kind: str = Field(..., max_length=20)
+    ids: list
+    confirm: str = Field(..., max_length=10)
+
+
+class OwnerEdit(BaseModel):
+    name: Optional[str] = Field(None, max_length=200)
+    title: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = Field(None, max_length=2000)
+    department: Optional[str] = Field(None, max_length=100)
+    location: Optional[str] = Field(None, max_length=120)
+    goal: Optional[str] = Field(None, max_length=300)
+    passion: Optional[str] = Field(None, max_length=300)
+    availability: Optional[str] = Field(None, max_length=100)
+    equipment: Optional[str] = Field(None, max_length=300)
+    bio: Optional[str] = Field(None, max_length=500)
+    email: Optional[str] = Field(None, max_length=254)
+    owner: Optional[str] = Field(None, max_length=120)
+    sector: Optional[str] = Field(None, max_length=60)
+    main_problem: Optional[str] = Field(None, max_length=500)
+    budget: Optional[float] = None
+    status: Optional[str] = Field(None, max_length=20)

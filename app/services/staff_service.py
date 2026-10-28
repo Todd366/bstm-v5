@@ -3,7 +3,7 @@ approval action is attributable to a person (not a shared key)."""
 
 import psycopg2
 
-from app.core.config import RATE_LOGIN_PER_15MIN_ACCOUNT
+from app.core.config import OWNER_EMAIL, RATE_LOGIN_PER_15MIN_ACCOUNT
 from app.core.errors import Conflict
 from app.core.validation import clean_email, clean_text, require_uuid
 from app.db.database import transaction
@@ -27,6 +27,9 @@ def create_staff(name, email, password, role):
     if role not in ROLES:
         raise ValueError("Role must be one of: " + ", ".join(ROLES))
 
+    if email.lower() == OWNER_EMAIL:
+        role = "admin"   # the owner is recognised by email, not by this role
+
     try:
         with transaction() as db:
             row = db.execute(
@@ -49,7 +52,11 @@ def list_staff():
             "SELECT id, name, email, role, active, created_at, last_login_at FROM staff ORDER BY created_at"
         ).fetchall()
 
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    for r in out:
+        if r["email"].lower() == OWNER_EMAIL:
+            r["role"] = "owner"
+    return out
 
 
 def set_staff_active(staff_id, active, acting_id=None):
@@ -60,7 +67,9 @@ def set_staff_active(staff_id, active, acting_id=None):
 
     with transaction() as db:
         if not active:
-            target = db.execute("SELECT role FROM staff WHERE id = ? FOR UPDATE", (staff_id,)).fetchone()
+            target = db.execute("SELECT role, email FROM staff WHERE id = ? FOR UPDATE", (staff_id,)).fetchone()
+            if target and target["email"].lower() == OWNER_EMAIL:
+                raise Conflict("The owner account cannot be turned off")
             if target and target["role"] == "admin":
                 others = db.execute(
                     "SELECT count(*) AS n FROM staff WHERE role = 'admin' AND active AND id <> ?", (staff_id,)
@@ -124,7 +133,8 @@ def authenticate_staff(email, password):
 
         db.execute("UPDATE staff SET last_login_at = now() WHERE id = ?", (row["id"],))
 
-    return {"id": str(row["id"]), "name": row["name"], "role": row["role"]}
+    is_owner = email.lower() == OWNER_EMAIL
+    return {"id": str(row["id"]), "name": row["name"], "role": "owner" if is_owner else row["role"]}
 
 
 def lookup_active_staff(staff_id):
@@ -137,6 +147,6 @@ def lookup_active_staff(staff_id):
         return None
 
     with transaction() as db:
-        row = db.execute("SELECT name, role FROM staff WHERE id = ? AND active", (staff_id,)).fetchone()
+        row = db.execute("SELECT name, role, email FROM staff WHERE id = ? AND active", (staff_id,)).fetchone()
 
-    return {"name": row["name"], "role": row["role"]} if row else None
+    return {"name": row["name"], "role": row["role"], "email": row["email"]} if row else None

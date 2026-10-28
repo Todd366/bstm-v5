@@ -11,6 +11,8 @@ PEOPLE_READ = {"admin", "field", "support"}
 
 # (path prefix, method or None for any, allowed roles) — first match wins.
 RULES = [
+    ("/admin/staff", None, {"owner"}),
+    ("/admin/owner", None, {"owner"}),
     ("/admin/me", None, ALL),
     ("/admin/queue", None, ALL),
     ("/admin/stats", None, ALL),
@@ -33,6 +35,12 @@ RULES = [
     ("/evidence", None, FIELD),
     ("/matches", None, FIELD),
 ]
+
+
+def is_allowed(role, method, path):
+    """The owner may do anything; everyone else is limited by RULES."""
+
+    return role == "owner" or role in allowed_roles(method, path)
 
 
 def allowed_roles(method, path):

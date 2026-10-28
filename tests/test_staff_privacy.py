@@ -51,7 +51,8 @@ def test_staff_login_and_role_matrix(test_database):
         ("GET", "/youth"): (field, sup, adm),
         ("POST", "/admin/resets"): (sup, adm),
         ("GET", "/admin/queue"): (fin, field, sup, adm),
-        ("GET", "/admin/staff"): (adm,),
+        ("GET", "/admin/staff"): (),
+        ("GET", "/admin/owner/records"): (),
         ("POST", "/admin/migrations/apply"): (adm,),
     }
     everyone = {"fin": fin, "field": field, "sup": sup, "adm": adm}
@@ -62,6 +63,12 @@ def test_staff_login_and_role_matrix(test_database):
 
     # other kinds of token never work on staff routes
     assert call("GET", "/invoices", bearer(create_access_token("11111111-1111-1111-1111-111111111111")))[0] == 401
+    # only the owner (by email) and the shared key reach owner tools
+    from app.core.config import OWNER_EMAIL
+    _, owner = _staff("admin", OWNER_EMAIL)
+    assert call("GET", "/admin/staff", bearer(owner))[0] == 200
+    assert call("GET", "/admin/owner/records", bearer(owner))[0] == 200
+    assert call("GET", "/invoices", bearer(owner))[0] == 200
     # the shared key still works as admin
     status, out = call("GET", "/admin/staff", {"X-API-Key": mw.API_KEY})
     assert status == 200 and json.loads(out["body"])["is_admin"] is True
@@ -171,3 +178,37 @@ def test_scorecard_reports_real_state(test_database):
     assert names["Named admin accounts"]["status"] == "WARN"
     _staff("admin")
     assert {c["name"]: c for c in scorecard_service.scorecard()["checks"]}["Named admin accounts"]["status"] == "OK"
+
+
+def test_owner_can_edit_and_delete_but_money_is_protected(test_database):
+    from app.services import opportunity_service, owner_service
+
+    yid = create_youth(name="Test Person", email="t1@example.com")
+    real = create_youth(name="Real Person", email="real@gmail.com")
+    rows = {r["name"]: r for r in owner_service.list_records("youth")}
+    assert rows["Test Person"]["suggested_test"] and not rows["Real Person"]["suggested_test"]
+
+    owner_service.update_record("youth", real, {"location": "Maun", "goal": "Farm"}, actor="Owner")
+    with transaction() as db:
+        assert db.execute("SELECT location FROM youth WHERE id = ?", (real,)).fetchone()["location"] == "Maun"
+    with pytest.raises(ValueError):
+        owner_service.update_record("youth", real, {}, actor="Owner")
+
+    with pytest.raises(ValueError):
+        owner_service.delete_records("youth", [yid], "yes")
+    res = owner_service.delete_records("youth", [yid], "DELETE", actor="Owner")
+    assert res["removed"] == [yid] and len(owner_service.list_records("youth")) == 1
+
+    # a business with a paid job history cannot be deleted
+    _completed_job(name="Money Shop")
+    biz = [r for r in owner_service.list_records("businesses") if r["name"] == "Money Shop"][0]
+    res = owner_service.delete_records("businesses", [str(biz["id"])], "DELETE")
+    assert res["removed"] == [] and res["kept_because_of_money"]
+
+    # a business with only jobs: both go
+    b2 = business_service.create_business("Plain Shop", "Owner", "Retail", "Maun", "x", email="plain@example.com", password=PW)
+    opportunity_service.create_opportunity(b2, "Paint", "d", None, 100)
+    res = owner_service.delete_records("businesses", [b2], "DELETE")
+    assert res["removed"] == [b2]
+    with transaction() as db:
+        assert db.execute("SELECT count(*) AS n FROM opportunities WHERE title = 'Paint'").fetchone()["n"] == 0

@@ -22,7 +22,7 @@ from app.services.assignment_service import (
 )
 from datetime import timedelta
 
-from app.services import notification_service, payment_service, privacy_service, reset_service, scorecard_service, staff_service
+from app.services import notification_service, payment_service, owner_service, privacy_service, reset_service, scorecard_service, staff_service
 from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
 from app.services.brief_service import get_brief
@@ -806,3 +806,15 @@ def export_my_data(youth_id):
 
 def delete_my_account(youth_id, data):
     return privacy_service.delete_youth(youth_id, data["password"])
+
+
+def owner_records(kind):
+    return owner_service.list_records(kind)
+
+
+def owner_delete(data, by="owner"):
+    return owner_service.delete_records(data["kind"], data["ids"], data["confirm"], actor=by)
+
+
+def owner_edit(kind, record_id, data, by="owner"):
+    return owner_service.update_record(kind, record_id, {k: v for k, v in data.items() if v is not None}, actor=by)

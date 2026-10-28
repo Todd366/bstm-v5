@@ -311,9 +311,9 @@
 
   // ---------- app shell ----------
   var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["money", "💰", "Money"], ["me", "👤", "Me"]];
-  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["sys", "✅", "System"]];
-  var AROLE = { admin: null, finance: ["queue", "money"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
-  function atabAllowed(k) { if (S.adminKey && !S.staffToken) return k !== "sys" || true; var r = AROLE[S.staffRole]; return r === undefined ? false : (r === null || r.indexOf(k) >= 0); }
+  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["sys", "✅", "System"], ["owner", "👑", "Owner"]];
+  var AROLE = { owner: null, admin: ["queue", "money", "biz", "jobs", "youth", "audit", "reset", "sys"], finance: ["queue", "money"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
+  function atabAllowed(k) { if (S.adminKey && !S.staffToken) return true; var r = AROLE[S.staffRole]; return r === undefined ? false : (r === null || r.indexOf(k) >= 0); }
   var BTABS = [["bjobs", "💼", "Jobs"], ["bpost", "➕", "Post a job"], ["binv", "🧾", "Invoices"]];
   function drawTabs() {
     clear(tabs); tabs.hidden = !S.token && !isStaff() && !S.btoken;
@@ -340,6 +340,7 @@
   function route() {
     $("outBtn").hidden = !S.token && !isStaff() && !S.btoken; $("outBtn").textContent = t("Log out"); $("langBtn").textContent = t("Setswana");
     drawTabs();
+    try { var cur = tabs.querySelector("[aria-current]"); if (cur && cur.scrollIntoView) cur.scrollIntoView({ inline: "center", block: "nearest" }); } catch (e) {}
     var pm = /^#\/p\/([0-9a-fA-F-]{36})$/.exec(location.hash || "");
     if (pm) return publicProfileView(pm[1]);
     if (isStaff()) { $("who").textContent = S.staffName || "Staff"; $("outBtn").hidden = false; return adminRoute(); }
@@ -852,7 +853,7 @@
       ev.preventDefault(); err.textContent = "";
       var btn = f.querySelector("button[type=submit]");
       if (!keyBox.hidden && val(f, "key")) {
-        S.adminKey = val(f, "key"); S.staffToken = null; S.staffRole = "admin"; S.staffName = "Admin key";
+        S.adminKey = val(f, "key"); S.staffToken = null; S.staffRole = "owner"; S.staffName = "Owner key";
         return busy(btn, api("/admin/stats", { admin: true })).then(function () { keep(null); route(); })
           .catch(function (e) { S.adminKey = null; err.textContent = e.status === 401 || e.status === 403 ? "That key was not accepted." : e.message; });
       }
@@ -888,14 +889,14 @@
       h("button", { class: "btn sec", type: "button", text: "Skip for now", onclick: function () { S.migOk = true; route(); } })));
   }
   function adminRoute() {
-    if (!S.migOk && S.staffRole !== "admin") S.migOk = true;
+    if (!S.migOk && S.staffRole !== "admin" && S.staffRole !== "owner") S.migOk = true;
     if (!S.migOk) {
       show(h("div", { class: "spin", text: t("Loading…") }));
       return A("/admin/migrations").then(function (m) { if (m && m.pending && m.pending.length) return migrateScreen(m); S.migOk = true; route(); },
         function () { S.migOk = true; route(); });
     }
     show(h("div", { class: "spin", text: t("Loading…") }));
-    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, sys: aSys }[S.atab] || aQueue)().catch(function (e) {
+    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, sys: aSys, owner: aOwner }[S.atab] || aQueue)().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);
       show(h("div", { class: "card empty" }, h("p", { text: e.message }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
     });
@@ -948,6 +949,63 @@
       var node = h("div", null, h("h1", { text: "System check" }), h("p", { class: "m", text: "Each line was measured just now." }));
       r.checks.forEach(function (c) {
         node.appendChild(h("div", { class: "card" }, h("h3", { text: c.name }), h("p", null, h("span", { class: "tag " + (c.status === "OK" ? "ok" : "warn"), text: c.status }), " " + c.detail)));
+      });
+      show(node);
+    });
+  }
+  var OWNER_KINDS = [["youth", "People"], ["businesses", "Businesses"], ["jobs", "Jobs"]];
+  var OWNER_FIELDS = {
+    youth: [["name", "Name"], ["email", "Email"], ["location", "Location"], ["goal", "Goal"], ["passion", "Passion"], ["availability", "Availability"], ["equipment", "Equipment"], ["bio", "About"]],
+    businesses: [["name", "Business name"], ["owner", "Owner"], ["email", "Email"], ["sector", "Sector"], ["location", "Location"], ["main_problem", "Main problem"]],
+    jobs: [["title", "Title"], ["description", "Description"], ["department", "Department"], ["budget", "Budget (P)"], ["status", "Status"]]
+  };
+  function aOwner() {
+    var kind = S.okind || "youth";
+    return A("/admin/owner/records?kind=" + kind).then(function (rows) {
+      var picked = {}, delBtn = h("button", { class: "btn sm", type: "button", text: "Delete selected (0)", disabled: true });
+      function count() { var n = Object.keys(picked).length; delBtn.textContent = "Delete selected (" + n + ")"; delBtn.disabled = !n; }
+      var chips = h("div", { class: "chips" }, OWNER_KINDS.map(function (k) {
+        return h("button", { type: "button", class: "chip", "aria-pressed": kind === k[0] ? "true" : "false", text: k[1], onclick: function () { S.okind = k[0]; route(); } });
+      }));
+      var suspects = rows.filter(function (r) { return r.suggested_test && r.suggested_test.length && !Number(r.money_records); });
+      var node = h("div", null, h("h1", { text: "Owner" }),
+        h("p", { class: "m", text: "You can correct or remove any record. Money records are never deleted. Test-looking records are flagged; you decide what goes." }), chips,
+        h("p", { class: "m", text: rows.length + " records · " + suspects.length + " look like tests" }));
+      var boxes = [];
+      var selBtn = h("button", { class: "btn sm sec", type: "button", text: "Tick all that look like tests", onclick: function () {
+        boxes.forEach(function (b) { if (b.suspect) { b.el.checked = true; picked[b.id] = 1; } }); count();
+      } });
+      node.appendChild(selBtn); node.appendChild(delBtn);
+      delBtn.addEventListener("click", function () {
+        var ids = Object.keys(picked); if (!ids.length) return;
+        var word = window.prompt("This removes " + ids.length + " record(s) for good. Type DELETE to confirm.");
+        if (word !== "DELETE") return;
+        busy(delBtn, A("/admin/owner/delete", { kind: kind, ids: ids, confirm: "DELETE" })).then(function (r) {
+          say(r.removed.length + " removed" + (r.kept_because_of_money.length ? ", " + r.kept_because_of_money.length + " kept (money records)" : "") + "."); route();
+        }).catch(fail);
+      });
+      rows.forEach(function (r) {
+        var cb = h("input", { type: "checkbox", "aria-label": "Select " + r.name, style: "width:auto;min-height:0;margin-right:8px" });
+        cb.addEventListener("change", function () { if (cb.checked) picked[r.id] = 1; else delete picked[r.id]; count(); });
+        boxes.push({ el: cb, id: r.id, suspect: !!(r.suggested_test && r.suggested_test.length && !Number(r.money_records)) });
+        var detail = [r.email, r.location, r.sector, r.business, r.status, r.budget != null ? "P" + r.budget : null].filter(Boolean).join(" · ");
+        var card = h("div", { class: "card" }, h("h3", null, cb, r.name), h("p", { class: "m", text: detail }),
+          h("p", null, (r.suggested_test || []).map(function (x) { return h("span", { class: "tag warn", text: x }); }),
+            Number(r.money_records) ? h("span", { class: "tag", text: r.money_records + " money record(s): protected" }) : null));
+        var editBox = h("div");
+        card.appendChild(h("button", { class: "btn sm sec", type: "button", text: "Edit", onclick: function () {
+          clear(editBox);
+          var f = h("form", { novalidate: true }, OWNER_FIELDS[kind].map(function (fd) { return field(fd[1], fd[0], "text", { max: 2000, value: r[fd[0]] != null ? String(r[fd[0]]) : "" }); }),
+            h("p", { class: "err", role: "alert" }), h("button", { class: "btn sm", type: "submit", text: "Save changes" }));
+          f.addEventListener("submit", function (ev) {
+            ev.preventDefault(); var body = {};
+            OWNER_FIELDS[kind].forEach(function (fd) { var v = val(f, fd[0]); if (v !== "" && v !== String(r[fd[0]] != null ? r[fd[0]] : "")) body[fd[0]] = fd[0] === "budget" ? Number(v) : v; });
+            if (!Object.keys(body).length) return (f.querySelector(".err").textContent = "Nothing changed.");
+            busy(f.querySelector("button[type=submit]"), api("/admin/owner/" + kind + "/" + r.id, { admin: true, method: "PUT", body: body })).then(function () { say("Saved."); route(); }).catch(function (e) { f.querySelector(".err").textContent = e.message; });
+          });
+          editBox.appendChild(f);
+        } }));
+        card.appendChild(editBox); node.appendChild(card);
       });
       show(node);
     });

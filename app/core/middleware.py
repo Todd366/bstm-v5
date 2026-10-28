@@ -25,12 +25,13 @@ from starlette.responses import JSONResponse
 
 from app.core.config import (
     API_KEY,
+    OWNER_EMAIL,
     MAX_BODY_BYTES,
     RATE_LOGIN_PER_HOUR_IP,
     RATE_REGISTER_PER_HOUR,
 )
 from app.core.errors import RateLimitExceeded
-from app.core.permissions import allowed_roles
+from app.core.permissions import is_allowed
 from app.services.auth_service import decode_access_token, decode_token_payload
 from app.services.staff_service import lookup_active_staff
 from app.services.rate_limit_service import check_rate_limit
@@ -255,7 +256,7 @@ class AuthAndLoggingMiddleware:
 
         if provided:
             if API_KEY and secrets.compare_digest(provided.encode("utf-8"), API_KEY.encode("utf-8")):
-                state.update(is_admin=True, actor="admin-key", staff_role="admin", staff_id=None)
+                state.update(is_admin=True, actor="admin-key", staff_role="owner", staff_id=None)
                 return None
             return _json(401, "Missing or invalid credentials.", request_id)
 
@@ -275,11 +276,13 @@ class AuthAndLoggingMiddleware:
                     return _json(503, "Service temporarily unavailable.", request_id)
 
                 if staff:
-                    if staff["role"] not in allowed_roles(method, path):
+                    role = "owner" if (staff.get("email") or "").lower() == OWNER_EMAIL else staff["role"]
+
+                    if not is_allowed(role, method, path):
                         return _json(403, "Your role is not allowed to do this.", request_id)
 
-                    state.update(is_admin=staff["role"] == "admin", actor=staff["name"],
-                                 staff_role=staff["role"], staff_id=payload["sub"])
+                    state.update(is_admin=role in ("admin", "owner"), actor=staff["name"],
+                                 staff_role=role, staff_id=payload["sub"])
                     return None
 
         if not API_KEY and not token:

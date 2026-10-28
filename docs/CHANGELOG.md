@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.6.0
+- Owner role (BSTM_OWNER_EMAIL, default bstm366@gmail.com): edit and delete any person, business or job; money records protected; every change logged.
+- Team management is owner-only. Test-data review list in Staff -> Owner.
+- Fixes: tab bar overflow on phones, deleted members still counted.
+- `docs/AUDIT_2026-10-28.md`.
+
 ## 5.5.2
 - Emergency admin key can be set as `BSTM_STAFF_KEY` (falls back to `BSTM_API_KEY`).
 

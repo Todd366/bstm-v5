@@ -10,14 +10,14 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.5.0, pushed as 3bf49b4)
+## Current state (v5.6.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
 ## Phase 0: Verify what is live (do first, every release)
-- [ ] /health shows the new version; Staff -> System shows no FAIL.
-- [ ] Migrations applied (Update database). Check via Supabase: tables `staff`, `password_resets`, `invoices`, `field_audits`; skills count 41.
-- [ ] First admin created under Team; shared key no longer used day to day.
+- [x] /health shows 5.5.1 (checked 2026-10-28). [ ] Staff -> System shows no FAIL.
+- [x] Migrations applied; verified in Supabase 2026-10-28: skills 41, tables staff/password_resets/invoices/field_audits/unmatched_payments present.
+- [~] First admin: 1 staff row exists; confirm it is your named admin account; shared key no longer used day to day.
 - [ ] GitHub repo set to private (old history contains `data/` with names).
 
 ## Phase 1: Old-file review (done in v5.5.1)
@@ -26,12 +26,12 @@ Reviewed in `docs/archive/OLD_FILES_REVIEW.md`; originals in `docs/archive/legac
 - [ ] Cascade: after a job completes, suggest the next job for that business (needs paying history first).
 - [ ] Business audit area -> department routing, once job postings carry structured requirements.
 
-## Phase 2: Bug hunt (continuous)
+## Phase 2: Bug hunt (continuous; first pass in `AUDIT_2026-10-28.md`)
 Method per module: read the code, write a failing test for each suspected bug, fix, keep the test.
 Known suspects to test first:
 - [ ] Concurrency: two staff confirm the same payment; business accepts while youth withdraws (locks exist; add concurrent tests on real Postgres).
-- [ ] Support role can read youth `intake` (sensitive questionnaire) via `/youth/{id}`; restrict.
-- [ ] Deleted youth: confirm they vanish from matching, lists, public profile, candidate lists.
+- [ ] (open) Support role can read youth `intake` (sensitive questionnaire) via `/youth/{id}`; restrict.
+- [x] Deleted youth excluded from lists and counts (v5.6.0). [ ] Confirm they vanish from matching, lists, public profile, candidate lists.
 - [ ] Invoice void then re-completion: confirm a replacement invoice is possible and idempotent.
 - [ ] Rate-limit table growth: add scheduled cleanup of old `rate_limit_events`.
 - [ ] Staff token lookup hits the DB on every staff request: measure; cache for a few seconds if slow.
