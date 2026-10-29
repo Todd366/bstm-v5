@@ -206,3 +206,32 @@ def lookup_active_staff(staff_id):
         row = db.execute("SELECT name, role, email FROM staff WHERE id = ? AND active", (staff_id,)).fetchone()
 
     return {"name": row["name"], "role": row["role"], "email": row["email"]} if row else None
+
+
+def set_staff_role(staff_id, role, acting_id=None):
+    """Promote or change someone's role (owner only, by route)."""
+
+    staff_id = require_uuid(staff_id, "Staff member")
+
+    if role not in ROLES:
+        raise ValueError("Role must be one of: " + ", ".join(ROLES))
+
+    with transaction() as db:
+        row = db.execute("SELECT role, approved FROM staff WHERE id = ? FOR UPDATE", (staff_id,)).fetchone()
+
+        if not row:
+            raise ValueError("Staff member not found")
+
+        if not row["approved"]:
+            raise Conflict("Approve this account first")
+
+        if row["role"] == role:
+            raise ValueError("They already have that role")
+
+        db.execute("UPDATE staff SET role = ? WHERE id = ?", (role, staff_id))
+        db.execute(
+            "INSERT INTO activity (event, actor_id, target_id, details) VALUES ('staff_role_changed', NULL, ?, ?)",
+            (staff_id, '{"from": "%s", "to": "%s"}' % (row["role"], role)),
+        )
+
+    return {"id": staff_id, "role": role, "from": row["role"]}

@@ -22,7 +22,7 @@ from app.services.assignment_service import (
 )
 from datetime import timedelta
 
-from app.services import notification_service, payment_service, owner_service, privacy_service, reset_service, scorecard_service, staff_service
+from app.services import notification_service, payment_service, owner_service, attention_service, privacy_service, reset_service, scorecard_service, staff_service
 from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
 from app.services.brief_service import get_brief
@@ -831,3 +831,22 @@ def staff_approve(staff_id, data):
 
 def staff_delete(staff_id):
     return staff_service.delete_staff(staff_id)
+
+
+def staff_set_role(staff_id, data):
+    return staff_service.set_staff_role(staff_id, data["role"])
+
+
+def get_attention(role):
+    return attention_service.attention_for(role)
+
+
+def youth_profile_for_staff(youth_id, role):
+    """Support and finance staff see a person's profile without the private
+    questionnaire answers (intake)."""
+
+    profile = get_youth(youth_id)
+    if role not in ("owner", "admin", "field"):
+        profile = dict(profile)
+        profile.pop("intake", None)
+    return profile

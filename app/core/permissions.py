@@ -14,6 +14,7 @@ RULES = [
     ("/admin/staff", None, {"owner"}),
     ("/admin/owner", None, {"owner"}),
     ("/admin/me", None, ALL),
+    ("/admin/attention", None, ALL),
     ("/admin/queue", None, ALL),
     ("/admin/stats", None, ALL),
     ("/admin/activity", None, ALL),

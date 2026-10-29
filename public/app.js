@@ -963,6 +963,14 @@
           card.appendChild(ok);
         } else {
           card.appendChild(h("p", null, h("span", { class: "tag", text: m.role }), h("span", { class: "tag " + (m.active ? "ok" : "warn"), text: m.active ? "Active" : "Off" })));
+          var rc = h("select", { "aria-label": "Change role" }, ["support", "field", "finance", "admin"].map(function (x) { return h("option", { value: x, text: x, selected: x === m.role ? "selected" : null }); }));
+          rc.value = m.role;
+          var rb = h("button", { class: "btn sm", type: "button", text: "Change role" });
+          rb.addEventListener("click", function () {
+            if (rc.value === m.role) return say("They already have that role.", true);
+            busy(rb, A("/admin/staff/" + m.id + "/role", { role: rc.value })).then(function () { say(m.name + " is now " + rc.value + "."); route(); }).catch(fail);
+          });
+          card.appendChild(rc); card.appendChild(rb);
           aact(card, m.active ? "Turn off" : "Turn on", "/admin/staff/" + m.id + "/active", { active: !m.active }, "sec", "Saved.");
         }
         del(card, m);
@@ -1039,13 +1047,28 @@
   }
   function safeLink(u) { return u && /^https?:\/\//i.test(u) ? h("a", { href: u, target: "_blank", rel: "noopener noreferrer nofollow", text: "Open link" }) : null; }
 
+  function greet() { var hr = new Date().getHours(); return hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening"; }
+  function attentionCard(a) {
+    if (!a) return null;
+    if (a.all_clear && !a.items.length) return h("div", { class: "card" }, h("h3", { text: "All clear ✓" }), h("p", { class: "m", text: "Nothing is stuck or waiting. The app checked itself just now." }));
+    var icon = { fail: "⛔", warn: "⏳", info: "ℹ️" };
+    var card = h("div", { class: "card" }, h("h3", { text: a.all_clear ? "For your attention" : "Needs attention" }), h("p", { class: "m", text: "The app checked itself just now." }));
+    a.items.forEach(function (i) {
+      var go = function () { S.atab = i.tab; route(); };
+      card.appendChild(h("button", { type: "button", class: "chip", style: "display:block;width:100%;text-align:left;margin:6px 0;border-radius:12px;padding:10px 14px", onclick: go },
+        h("b", { text: icon[i.level] + " " + i.title }), h("br"), h("span", { class: "m", text: i.detail })));
+    });
+    return card;
+  }
+
   function aQueue() {
-    return Promise.all([A("/admin/stats"), A("/admin/queue"), A("/admin/activity?limit=15")]).then(function (r) {
+    return Promise.all([A("/admin/stats"), A("/admin/queue"), A("/admin/activity?limit=15"), A("/admin/attention").catch(function () { return null; })]).then(function (r) {
+      S.attn = r[3];
       var c = (r[0] && r[0].counts) || {}, qd = r[1] || { applications: [], trials: [] }, act = r[2] || [];
       return Promise.all(qd.trials.map(function (t3) { return A("/trials/" + t3.trial_id + "/evidence").catch(function () { return []; }); })).then(function (evs) { return [c, qd, act, evs]; });
     }).then(function (r) {
       var c = r[0], qd = r[1], act = r[2], evs = r[3];
-      var node = h("div", null, h("h1", { text: "Queue" }),
+      var node = h("div", null, h("h1", { text: greet() + (S.staffName ? ", " + S.staffName : "") }), attentionCard(S.attn),
         h("div", { class: "card stat" }, Object.keys(c).slice(0, 4).map(function (k) { return stat(c[k], k.replace(/_/g, " ")); })));
       moneyQueue(node, qd);
       node.appendChild(h("h2", { text: "Applications (" + qd.applications.length + ")" }));

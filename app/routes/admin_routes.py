@@ -7,6 +7,9 @@ from app.api.service import (
     owner_edit,
     owner_records,
     add_staff,
+    get_attention,
+    staff_set_role,
+    youth_profile_for_staff,
     staff_approve,
     staff_delete,
     get_open_resets,
@@ -159,8 +162,8 @@ def youth_list(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0
 
 
 @router.get("/youth/{youth_id}")
-def youth_get(youth_id: str):
-    return service_call(get_youth_profile, youth_id)
+def youth_get(youth_id: str, request: Request):
+    return service_call(youth_profile_for_staff, youth_id, getattr(request.state, "staff_role", "owner"))
 
 
 @router.get("/youth/{youth_id}/capabilities")
@@ -459,6 +462,16 @@ def staff_active(staff_id: str, payload: StaffActive, request: Request):
 @router.post("/admin/staff/{staff_id}/approve")
 def staff_approve_route(staff_id: str, payload: StaffApprove):
     return service_call(staff_approve, staff_id, payload.dict())
+
+
+@router.post("/admin/staff/{staff_id}/role")
+def staff_role_route(staff_id: str, payload: StaffApprove):
+    return service_call(staff_set_role, staff_id, payload.dict())
+
+
+@router.get("/admin/attention")
+def attention(request: Request):
+    return service_call(get_attention, getattr(request.state, "staff_role", "owner"))
 
 
 @router.delete("/admin/staff/{staff_id}")

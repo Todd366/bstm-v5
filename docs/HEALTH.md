@@ -1,4 +1,4 @@
-# Health of BSTM Activation (v5.5.0)
+# Health of BSTM Activation (v5.8.0)
 
 Each line says how it is known. "Tested" = automated test passes in CI. "Measured live" = shown on the staff System tab. "Not done" = real gap.
 
@@ -9,6 +9,8 @@ Each line says how it is known. "Tested" = automated test passes in CI. "Measure
 | Staff roles, individual logins, void invoice | Working | Tested (role matrix over the real middleware) |
 | Password reset (staff-issued code) | Working | Tested |
 | Data export / account deletion | Working | Tested |
+| Role changes, staff requests, built-in owner | Working | Tested |
+| Self-checking (Needs attention, ledger invariants) | Working | Tested (broken ledger is caught) |
 | Live checks (env, secrets, ledger balance, stuck money) | Working | Measured live (System tab) |
 | Automatic payment collection (card/mobile money) | Not done | Needs a provider decision; payments are recorded by hand |
 | SMS / WhatsApp alerts | Not done | In-app alerts only |

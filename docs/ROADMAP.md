@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.6.0)
+## Current state (v5.8.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -30,7 +30,7 @@ Reviewed in `docs/archive/OLD_FILES_REVIEW.md`; originals in `docs/archive/legac
 Method per module: read the code, write a failing test for each suspected bug, fix, keep the test.
 Known suspects to test first:
 - [ ] Concurrency: two staff confirm the same payment; business accepts while youth withdraws (locks exist; add concurrent tests on real Postgres).
-- [ ] (open) Support role can read youth `intake` (sensitive questionnaire) via `/youth/{id}`; restrict.
+- [x] Support/finance no longer see youth `intake` (v5.8.0).
 - [x] Deleted youth excluded from lists and counts (v5.6.0). [ ] Confirm they vanish from matching, lists, public profile, candidate lists.
 - [ ] Invoice void then re-completion: confirm a replacement invoice is possible and idempotent.
 - [ ] Rate-limit table growth: add scheduled cleanup of old `rate_limit_events`.

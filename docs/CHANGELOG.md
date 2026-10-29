@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.8.0
+- Owner can promote/demote team members (Team -> Change role); takes effect on their next request; logged.
+- "Needs attention": the app checks itself (stuck payments/payouts/reviews, unpaid invoices, broken ledger facts, old records) and tells each role what is theirs. Greeting on the Queue.
+- Support and finance staff no longer see a person's private questionnaire answers.
+- Invariant tests: a full job-to-payout lifecycle must never trip a fail-level check.
+
 ## 5.7.0
 - Owner is built in (no account to create): sign in at Staff sign in with bstm366@gmail.com and the owner password (`BSTM_OWNER_PASSWORD`, or the staff key if not set).
 - Staff sign-in has "Create a staff account": the request waits (switched off) until the owner approves it and picks a role.
