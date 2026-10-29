@@ -89,6 +89,51 @@ def calculate_match_score(
     return min(score, 100)
 
 
+def requirement_score(required_ids, owned):
+    """Fit between the skills a job asks for and what a youth has.
+
+    required_ids: set of capability ids the job names.
+    owned: {capability_id: (level, verified)} for the youth.
+    Returns (score 0-100, covered ids). 0 when none of the skills are held:
+    60 points for coverage, up to 20 for the best level, 10 if any is verified
+    by BSTM, 10 if every required skill is held."""
+
+    covered = [c for c in required_ids if c in owned]
+
+    if not covered:
+        return 0, []
+
+    score = round(60 * len(covered) / len(required_ids))
+    score += max(LEVEL_WEIGHTS.get(owned[c][0], 0) for c in covered)
+
+    if any(owned[c][1] for c in covered):
+        score += 10
+
+    if len(covered) == len(required_ids):
+        score += 10
+
+    return min(score, 100), covered
+
+
+def _requirements(db, opportunity_ids):
+    """{opportunity_id: {capability_id: name}} for the given jobs."""
+
+    if not opportunity_ids:
+        return {}
+
+    marks = ",".join("?" * len(opportunity_ids))
+    rows = db.execute(
+        "SELECT r.opportunity_id, r.capability_id, c.name FROM opportunity_requirements r "
+        "JOIN capabilities c ON c.id = r.capability_id WHERE r.opportunity_id IN (" + marks + ")",
+        tuple(opportunity_ids),
+    ).fetchall()
+
+    out = {}
+    for r in rows:
+        out.setdefault(str(r["opportunity_id"]), {})[str(r["capability_id"])] = r["name"]
+    return out
+
+
 def _same_place(a, b):
     """Loose place match: 'Mochudi' vs 'mochudi, kgatleng' → True."""
 
@@ -154,9 +199,41 @@ def match_youth_to_opportunities(youth_id, limit=50):
             (youth_id, MAX_CANDIDATES),
         ).fetchall()
 
+        reqs = _requirements(db, [o["opportunity_id"] for o in opportunities])
+
     results = []
+    owned = {str(c["capability_id"]): (c["level"], c["verified"]) for c in capabilities}
 
     for opp in opportunities:
+
+        required = reqs.get(str(opp["opportunity_id"]))
+
+        if required:
+            score, covered = requirement_score(set(required), owned)
+
+            if score <= 0:
+                continue
+
+            cap = next(c for c in capabilities if str(c["capability_id"]) in covered)
+            names = [required[c] for c in covered]
+            reasons = ["Has the skills this job asks for: " + ", ".join(names)]
+
+            if len(covered) < len(required):
+                missing = [n for c, n in required.items() if c not in covered]
+                reasons.append("Still to add: " + ", ".join(missing))
+
+            if _same_place(youth["location"], opp["business_location"]):
+                score = min(100, score + LOCATION_BONUS)
+                reasons.append("In your area")
+
+            result = dict(opp)
+            result.update({
+                "match_score": score, "capability_id": cap["capability_id"], "capability_name": cap["capability_name"],
+                "capability_category": cap["capability_category"], "level": cap["level"], "verified": cap["verified"],
+                "matched_capabilities": names, "reasons": reasons, "required_skills": sorted(required.values()),
+            })
+            results.append(result)
+            continue
 
         searchable_description = " ".join(
             part for part in (opp["description"], opp["department"]) if part
@@ -349,11 +426,11 @@ def candidates_for_opportunity(opportunity_id, limit=20):
             """
             SELECT y.id AS youth_id, y.name, y.location, y.level,
                    c.name AS capability_name, c.category AS capability_category,
-                   yc.level AS cap_level, yc.verified
+                   yc.level AS cap_level, yc.verified, yc.capability_id
             FROM youth y
             JOIN youth_capabilities yc ON yc.youth_id = y.id
             JOIN capabilities c ON c.id = yc.capability_id
-            WHERE NOT EXISTS (
+            WHERE y.deleted_at IS NULL AND NOT EXISTS (
                 SELECT 1 FROM opportunity_assignments oa
                 WHERE oa.opportunity_id = ? AND oa.youth_id = y.id
             )
@@ -361,8 +438,32 @@ def candidates_for_opportunity(opportunity_id, limit=20):
             (opportunity_id,),
         ).fetchall()
 
+        required = _requirements(db, [opportunity_id]).get(opportunity_id, {})
+
     text = " ".join(p for p in (opp["description"], opp["department"]) if p)
     best = {}
+
+    if required:
+        people = {}
+        for r in rows:
+            person = people.setdefault(r["youth_id"], {"row": r, "owned": {}})
+            person["owned"][str(r["capability_id"])] = (r["cap_level"], r["verified"])
+
+        for yid, person in people.items():
+            score, covered = requirement_score(set(required), person["owned"])
+            if score <= 0:
+                continue
+            r = person["row"]
+            if _same_place(r["location"], opp["location"]):
+                score = min(100, score + LOCATION_BONUS)
+            best[yid] = {
+                "youth_id": yid, "name": r["name"], "location": r["location"], "level": r["level"],
+                "capability_name": ", ".join(required[c] for c in covered),
+                "verified": any(person["owned"][c][1] for c in covered), "match_score": score,
+                "covers": "%d of %d required skills" % (len(covered), len(required)),
+            }
+
+        return sorted(best.values(), key=lambda c: -c["match_score"])[:limit]
 
     for r in rows:
         score = calculate_match_score(

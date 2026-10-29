@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.8.0)
+## Current state (v5.9.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -44,7 +44,7 @@ Known suspects to test first:
 - [ ] Payment provider: owner's constraints are Absa savings card, DPO rejected. Candidate path: manual Orange Money / MyZaka confirm (live now) -> SMS-bridge adapter (built, needs a phone running the bridge) -> a gateway adapter once a provider accepts the business. Decision needed from owner; see project doc `payments-botswana-2026-10`.
 - [ ] Notifications beyond in-app: SMS or WhatsApp (provider decision), keep in-app as source of truth.
 - [ ] Phone-number login / OTP (needs SMS provider).
-- [ ] Structured job requirements (department + skills on a posting) so matching stops guessing.
+- [x] Structured job requirements (v5.9.0). [ ] Staff-side picker when staff post a job; [ ] show requirements to staff in the queue.
 - [ ] Field audit -> suggested jobs -> business confirmation loop (reuse existing audit and diagnosis services).
 - [ ] Reports: monthly numbers for BSTM (people helped, jobs, money moved, verified skills) from live data.
 - [ ] Public verification: shareable proof page for a youth's verified work (opt-in, exists as public profile; extend with evidence).

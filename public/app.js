@@ -394,7 +394,8 @@
       h("p", { class: "m", text: [o.business_name || o.department || "BSTM", o.business_location].filter(Boolean).join(" · ") }),
       o.description ? h("p", { text: o.description.length > 220 ? o.description.slice(0, 220) + "…" : o.description }) : null,
       h("p", null, h("span", { class: "tag", text: money(o.budget) }), matched ? h("span", { class: "tag ok", text: "Fit " + o.match_score + "%" }) : null,
-        (o.reasons || []).map(function (r) { return h("span", { class: "tag", text: r }); })));
+        (o.reasons || []).map(function (r) { return h("span", { class: "tag", text: r }); })),
+      o.required_skills && o.required_skills.length ? h("p", { class: "m", text: "Skills needed: " + o.required_skills.join(", ") }) : null);
     var b = h("button", { class: "btn", type: "button", text: t("Apply") });
     b.addEventListener("click", function () {
       busy(b, api("/me/opportunities/" + encodeURIComponent(o.opportunity_id || o.id) + "/apply", { method: "POST", body: {} })).then(function () {
@@ -785,18 +786,34 @@
     });
   }
   function bPost() {
-    return loadDepts().then(function (depts) {
+    return Promise.all([loadDepts(), api("/catalog/capabilities", { anon: true }).catch(function () { return []; })]).then(function (rr) {
+      var depts = rr[0], caps = rr[1] || [], chosen = {};
+      var skillBox = h("div", null, h("label", { text: "Skills needed (pick up to 5, optional)" }), h("p", { class: "m", text: "This helps BSTM send your job to the right young people." }));
+      var chips = h("div", { class: "chips" });
+      var countNote = h("p", { class: "m", text: "" });
+      caps.forEach(function (c) {
+        var b = h("button", { type: "button", class: "chip", "aria-pressed": "false", text: c.name });
+        b.addEventListener("click", function () {
+          if (chosen[c.id]) { delete chosen[c.id]; b.setAttribute("aria-pressed", "false"); }
+          else if (Object.keys(chosen).length >= 5) { say("Choose at most 5 skills.", true); return; }
+          else { chosen[c.id] = 1; b.setAttribute("aria-pressed", "true"); }
+          countNote.textContent = Object.keys(chosen).length ? Object.keys(chosen).length + " chosen" : "";
+        });
+        chips.appendChild(b);
+      });
+      skillBox.appendChild(chips); skillBox.appendChild(countNote);
       var err = h("p", { class: "err", role: "alert" });
       var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Post a job") }),
         field("What do you need done?", "title", "text", { max: 200, ph: "e.g. Make a poster for my shop" }),
         h("div", null, h("label", { for: "f_desc", text: "Details" }), h("textarea", { id: "f_desc", name: "description", maxlength: 4000, placeholder: "What exactly? By when? Where?" })),
         h("div", null, h("label", { for: "f_dept", text: "Type of help" }), h("select", { id: "f_dept", name: "department" }, h("option", { value: "", text: "Not sure" }), depts.map(function (d) { return h("option", { value: d, text: d }); }))),
+        skillBox,
         field("Budget (Pula)", "budget", "number", { im: "numeric", ph: "0 if free" }),
         h("p", { class: "m", text: "BSTM checks every job before youth see it. You pay after the work is approved; the youth gets 70%." }), err,
         h("button", { class: "btn", type: "submit", text: t("Submit") }));
       f.addEventListener("submit", function (ev) {
         ev.preventDefault(); err.textContent = "";
-        var body = { title: val(f, "title"), description: val(f, "description") || null, department: val(f, "department") || null, budget: Number(val(f, "budget")) || 0 };
+        var body = { title: val(f, "title"), description: val(f, "description") || null, department: val(f, "department") || null, budget: Number(val(f, "budget")) || 0, skills: Object.keys(chosen) };
         if (!body.title) return (err.textContent = "Say what you need done.");
         if (body.budget < 0) return (err.textContent = "Budget cannot be negative.");
         busy(f.querySelector("button[type=submit]"), api("/biz/opportunities", { method: "POST", body: body })).then(function () { say("Sent. BSTM will approve it soon."); S.btab = "bjobs"; route(); }).catch(function (x) { err.textContent = x.message; });

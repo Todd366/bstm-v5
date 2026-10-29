@@ -354,6 +354,7 @@ def create_business_opportunity(data):
         description=data.get("description"),
         department=data.get("department"),
         budget=data.get("budget", 0),
+        skills=data.get("skills"),
     )
 
     return {"status": "created", "id": opportunity_id}
@@ -654,6 +655,7 @@ def post_biz_job(business_id, data):
         budget=data.get("budget", 0),
         approval_status="Pending",
         created_by="business",
+        skills=data.get("skills"),
     )
 
     return {"status": "pending_approval", "id": opportunity_id}

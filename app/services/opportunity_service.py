@@ -16,6 +16,8 @@ ALLOWED_STATUSES = (
 
 MAX_BUDGET = 10_000_000
 
+MAX_JOB_SKILLS = 5
+
 _OPPORTUNITY_COLUMNS = """
     o.id, o.business_id, b.name AS business_name,
     b.location AS business_location,
@@ -32,6 +34,7 @@ def create_opportunity(
     budget=0,
     approval_status="Approved",
     created_by="staff",
+    skills=None,
 ):
 
     business_id = require_uuid(business_id, "Business")
@@ -56,6 +59,11 @@ def create_opportunity(
     if budget > MAX_BUDGET:
         raise ValueError("Budget is too large")
 
+    skills = [require_uuid(x, "Skill") for x in (skills or [])]
+
+    if len(set(skills)) > MAX_JOB_SKILLS:
+        raise ValueError("Choose at most %d skills" % MAX_JOB_SKILLS)
+
     with transaction() as db:
 
         business = db.execute(
@@ -65,6 +73,10 @@ def create_opportunity(
 
         if not business:
             raise ValueError("Business not found")
+
+        for skill in set(skills):
+            if not db.execute("SELECT 1 AS x FROM capabilities WHERE id = ?", (skill,)).fetchone():
+                raise ValueError("Skill not found")
 
         row = db.execute(
             """
@@ -79,6 +91,12 @@ def create_opportunity(
         ).fetchone()
 
         opportunity_id = row["id"]
+
+        for skill in set(skills):
+            db.execute(
+                "INSERT INTO opportunity_requirements (opportunity_id, capability_id) VALUES (?, ?)",
+                (opportunity_id, skill),
+            )
 
         db.execute(
             """
@@ -176,7 +194,17 @@ def browse_open_opportunities(youth_id, limit=50, offset=0, q=None, location=Non
             (youth_id, like, like, like, place, place, department, department, limit, offset),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+        from app.services.matching_service import _requirements
+
+        reqs = _requirements(db, [r["id"] for r in rows])
+
+    out = []
+    for row in rows:
+        row = dict(row)
+        row["required_skills"] = sorted(reqs.get(str(row["id"]), {}).values())
+        out.append(row)
+
+    return out
 
 
 def get_opportunity(opportunity_id):

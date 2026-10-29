@@ -158,8 +158,9 @@ await page.fill("input[aria-label=Score]", "90"); await click("Approve work"); a
 check("approve work posts score", seen.some((s) => s.p === "/biz/trials/t1/approve" && s.body.score === 90));
 await tab("Post a job"); await page.waitForSelector("text=What do you need done?");
 await page.fill("[name=title]", "Make a poster"); await page.fill("[name=budget]", "200");
+await page.locator(".chip", { hasText: /^Web design$/ }).first().click();
 await page.locator("form button[type=submit]").click(); await page.waitForTimeout(300);
-check("post job", seen.some((s) => s.m === "POST" && s.p === "/biz/opportunities" && s.body.title === "Make a poster" && s.body.budget === 200));
+check("post job", seen.some((s) => s.m === "POST" && s.p === "/biz/opportunities" && s.body.title === "Make a poster" && s.body.budget === 200 && Array.isArray(s.body.skills) && s.body.skills.length === 1));
 await tab("Invoices"); await page.waitForSelector("text=BSTM-1000");
 check("invoice + payment instructions", (await text("MyZaka 71234567")) && (await text("I have paid")));
 await page.fill("[name=provider_ref]", "MZ99887766"); await click("I have paid"); await page.waitForTimeout(300);

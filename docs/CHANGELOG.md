@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.0
+- Jobs can name the skills they need (up to 5). Matching uses them exactly: coverage, level, BSTM-verified, and area; explains what is still missing. Jobs without named skills still use text matching.
+- Business "Post a job" has a skill picker; job cards show "Skills needed".
+- Migration `20261029000000_job_requirements.sql` (apply via Update database).
+
 ## 5.8.0
 - Owner can promote/demote team members (Team -> Change role); takes effect on their next request; logged.
 - "Needs attention": the app checks itself (stuck payments/payouts/reviews, unpaid invoices, broken ledger facts, old records) and tells each role what is theirs. Greeting on the Queue.

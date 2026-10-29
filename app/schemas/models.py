@@ -51,6 +51,7 @@ class BizJobCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=4000)
     department: Optional[str] = Field(None, max_length=100)
     budget: float = 0
+    skills: List[str] = []
 
 
 class PaymentSubmit(BaseModel):
@@ -107,6 +108,7 @@ class OpportunityCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=4000)
     department: Optional[str] = Field(None, max_length=100)
     budget: float = 0
+    skills: List[str] = []
 
 
 class CapabilityCreate(BaseModel):
