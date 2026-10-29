@@ -840,11 +840,10 @@
   // ---------- staff console ----------
   function staffLogin() {
     var err = h("p", { class: "err", role: "alert" });
-    var keyBox = h("div", { hidden: true }, field("Staff key (emergency only)", "key", "password", { ac: "off", max: 200 }));
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Staff sign in" }),
-      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), keyBox, err,
+      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), err,
       h("button", { class: "btn", type: "submit", text: t("Log in") }),
-      h("button", { class: "btn sec", type: "button", text: "Use the staff key instead", onclick: function () { keyBox.hidden = !keyBox.hidden; } }),
+      h("button", { class: "btn sec", type: "button", text: "Create a staff account", onclick: staffSignup }),
       h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
     function keep(r) {
       try { sessionStorage.removeItem("bstm_admin"); if (r) { sessionStorage.setItem("bstm_staff", r.token); sessionStorage.setItem("bstm_srole", r.role); sessionStorage.setItem("bstm_sname", r.name); } else sessionStorage.setItem("bstm_admin", S.adminKey); } catch (e) {}
@@ -852,15 +851,24 @@
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";
       var btn = f.querySelector("button[type=submit]");
-      if (!keyBox.hidden && val(f, "key")) {
-        S.adminKey = val(f, "key"); S.staffToken = null; S.staffRole = "owner"; S.staffName = "Owner key";
-        return busy(btn, api("/admin/stats", { admin: true })).then(function () { keep(null); route(); })
-          .catch(function (e) { S.adminKey = null; err.textContent = e.status === 401 || e.status === 403 ? "That key was not accepted." : e.message; });
-      }
       busy(btn, api("/staff/login", { anon: true, body: { email: val(f, "email"), password: f.querySelector("[name=password]").value } })).then(function (r) {
         S.staffToken = r.access_token; S.staffRole = r.role; S.staffName = r.name; S.adminKey = null; S.atab = "queue";
         keep({ token: r.access_token, role: r.role, name: r.name }); route();
       }).catch(function (e) { err.textContent = e.message; });
+    });
+    show(f);
+  }
+  function staffSignup() {
+    var err = h("p", { class: "err", role: "alert" });
+    var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Create a staff account" }),
+      h("p", { class: "m", text: "Your account stays switched off until the BSTM owner approves it and gives you a role." }),
+      field("Your name", "name", "text", { max: 120 }), field("Email", "email", "email", { ac: "email", max: 254, im: "email" }),
+      field("Password (12+ characters)", "password", "password", { ac: "new-password", max: 128 }), err,
+      h("button", { class: "btn", type: "submit", text: "Ask for an account" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: staffLogin }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      busy(f.querySelector("button[type=submit]"), api("/staff/signup", { anon: true, body: { name: val(f, "name"), email: val(f, "email"), password: f.querySelector("[name=password]").value } }))
+        .then(function () { say("Request sent. The owner will approve it."); staffLogin(); }).catch(function (e) { err.textContent = e.message; });
     });
     show(f);
   }
@@ -934,11 +942,30 @@
         busy(f.querySelector("button"), A("/admin/staff", { name: val(f, "name"), email: val(f, "email"), password: f.querySelector("[name=password]").value, role: role.value }))
           .then(function () { say("Team member added."); route(); }).catch(function (e) { err.textContent = e.message; });
       });
-      var node = h("div", null, h("h1", { text: "Team" }), f);
+      var node = h("div", null, h("h1", { text: "Team" }),
+        h("div", { class: "card" }, h("h3", { text: "Owner (built in)" }), h("p", { class: "m", text: "Signs in with the owner email and the owner password. Cannot be removed." })), f);
+      var del = function (card, m) {
+        var b = h("button", { class: "btn sm sec", type: "button", text: "Delete" });
+        b.addEventListener("click", function () {
+          if (!window.confirm("Delete " + m.name + "? They lose access immediately.")) return;
+          busy(b, api("/admin/staff/" + m.id, { admin: true, method: "DELETE" })).then(function () { say("Deleted."); route(); }).catch(fail);
+        });
+        card.appendChild(b);
+      };
       list.forEach(function (m) {
-        var card = h("div", { class: "card" }, h("h3", { text: m.name }), h("p", { class: "m", text: m.email + " · last in " + (m.last_login_at ? when(m.last_login_at) : "never") }),
-          h("p", null, h("span", { class: "tag", text: m.role }), h("span", { class: "tag " + (m.active ? "ok" : "warn"), text: m.active ? "Active" : "Off" })));
-        aact(card, m.active ? "Turn off" : "Turn on", "/admin/staff/" + m.id + "/active", { active: !m.active }, "sec", "Saved.");
+        var card = h("div", { class: "card" }, h("h3", { text: m.name }), h("p", { class: "m", text: m.email + " · last in " + (m.last_login_at ? when(m.last_login_at) : "never") }));
+        if (m.approved === false) {
+          var rs = h("select", { "aria-label": "Role" }, ["support", "field", "finance", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
+          card.appendChild(h("p", null, h("span", { class: "tag warn", text: "Waiting for approval" })));
+          card.appendChild(rs);
+          var ok = h("button", { class: "btn sm", type: "button", text: "Approve" });
+          ok.addEventListener("click", function () { busy(ok, A("/admin/staff/" + m.id + "/approve", { role: rs.value })).then(function () { say("Approved."); route(); }).catch(fail); });
+          card.appendChild(ok);
+        } else {
+          card.appendChild(h("p", null, h("span", { class: "tag", text: m.role }), h("span", { class: "tag " + (m.active ? "ok" : "warn"), text: m.active ? "Active" : "Off" })));
+          aact(card, m.active ? "Turn off" : "Turn on", "/admin/staff/" + m.id + "/active", { active: !m.active }, "sec", "Saved.");
+        }
+        del(card, m);
         node.appendChild(card);
       });
       show(node);

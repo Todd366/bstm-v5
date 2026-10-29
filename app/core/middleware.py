@@ -62,6 +62,7 @@ PUBLIC_WRITES = {
     ("POST", "/businesses/login"): ("login-business", RATE_LOGIN_PER_HOUR_IP),
     ("POST", "/staff/login"): ("login-staff", RATE_LOGIN_PER_HOUR_IP),
     ("POST", "/auth/reset"): ("reset", RATE_LOGIN_PER_HOUR_IP),
+    ("POST", "/staff/signup"): ("staff-signup", RATE_REGISTER_PER_HOUR),
 }
 
 # Public by prefix. Webhooks authenticate by HMAC signature inside the

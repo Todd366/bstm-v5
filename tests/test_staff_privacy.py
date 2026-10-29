@@ -64,8 +64,7 @@ def test_staff_login_and_role_matrix(test_database):
     # other kinds of token never work on staff routes
     assert call("GET", "/invoices", bearer(create_access_token("11111111-1111-1111-1111-111111111111")))[0] == 401
     # only the owner (by email) and the shared key reach owner tools
-    from app.core.config import OWNER_EMAIL
-    _, owner = _staff("admin", OWNER_EMAIL)
+    owner = _owner_token()
     assert call("GET", "/admin/staff", bearer(owner))[0] == 200
     assert call("GET", "/admin/owner/records", bearer(owner))[0] == 200
     assert call("GET", "/invoices", bearer(owner))[0] == 200
@@ -78,14 +77,52 @@ def test_staff_login_and_role_matrix(test_database):
     assert call("GET", "/invoices", bearer(fin))[0] == 401
 
 
-def test_cannot_remove_last_admin_or_self(test_database):
-    a, _ = _staff("admin")
-    with pytest.raises(Conflict):
-        staff_service.set_staff_active(a, False)
-    b, _ = _staff("admin", "admin2@bstm.test")
+def _owner_token():
+    from app.core.config import API_KEY, OWNER_EMAIL
+
+    me = staff_service.authenticate_staff(OWNER_EMAIL, API_KEY)
+    assert me["role"] == "owner"
+    return create_access_token(me["id"], role="staff")
+
+
+def test_owner_is_built_in_and_reserved(test_database):
+    from app.core.config import OWNER_EMAIL
+
     with pytest.raises(ValueError):
-        staff_service.set_staff_active(b, False, acting_id=b)
-    staff_service.set_staff_active(a, False)
+        staff_service.authenticate_staff(OWNER_EMAIL, "wrong-password-1234")
+    with pytest.raises(Conflict):
+        staff_service.create_staff("Fake Owner", OWNER_EMAIL, PW, "admin")
+    with pytest.raises(Conflict):
+        staff_service.signup_staff("Fake Owner", OWNER_EMAIL.upper(), PW)
+    assert call("GET", "/admin/staff", bearer(_owner_token()))[0] == 200
+
+
+def test_staff_signup_approval_and_delete(test_database):
+    sid = staff_service.signup_staff("New Person", "new@bstm.test", PW)
+    with pytest.raises(ValueError) as e:
+        staff_service.authenticate_staff("new@bstm.test", PW)
+    assert "waiting for approval" in str(e.value)
+    with pytest.raises(ValueError):
+        staff_service.authenticate_staff("new@bstm.test", "wrong-password-1234")
+
+    staff_service.approve_staff(sid, "finance")
+    assert staff_service.authenticate_staff("new@bstm.test", PW)["role"] == "finance"
+
+    staff_service.set_staff_active(sid, False)
+    with pytest.raises(ValueError):
+        staff_service.authenticate_staff("new@bstm.test", PW)
+
+    staff_service.delete_staff(sid)
+    with pytest.raises(ValueError):
+        staff_service.authenticate_staff("new@bstm.test", PW)
+    with pytest.raises(ValueError):
+        staff_service.delete_staff(sid)
+
+
+def test_admin_can_be_deleted_without_blocking(test_database):
+    a, _ = _staff("admin")
+    staff_service.delete_staff(a)
+    assert staff_service.list_staff() == []
 
 
 def test_duplicate_staff_email_and_bad_role(test_database):

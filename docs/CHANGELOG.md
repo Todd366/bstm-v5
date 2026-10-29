@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.7.0
+- Owner is built in (no account to create): sign in at Staff sign in with bstm366@gmail.com and the owner password (`BSTM_OWNER_PASSWORD`, or the staff key if not set).
+- Staff sign-in has "Create a staff account": the request waits (switched off) until the owner approves it and picks a role.
+- Owner can delete any staff account; the owner email is reserved.
+- Migration `20261028000000_staff_signup.sql` (apply via Update database).
+
 ## 5.6.0
 - Owner role (BSTM_OWNER_EMAIL, default bstm366@gmail.com): edit and delete any person, business or job; money records protected; every change logged.
 - Team management is owner-only. Test-data review list in Staff -> Owner.

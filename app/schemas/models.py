@@ -241,3 +241,13 @@ class OwnerEdit(BaseModel):
     main_problem: Optional[str] = Field(None, max_length=500)
     budget: Optional[float] = None
     status: Optional[str] = Field(None, max_length=20)
+
+
+class StaffSignup(BaseModel):
+    name: str = Field(..., max_length=120)
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+
+
+class StaffApprove(BaseModel):
+    role: str = Field(..., max_length=20)

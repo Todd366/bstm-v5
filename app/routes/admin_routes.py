@@ -7,6 +7,8 @@ from app.api.service import (
     owner_edit,
     owner_records,
     add_staff,
+    staff_approve,
+    staff_delete,
     get_open_resets,
     get_scorecard,
     get_staff,
@@ -78,6 +80,7 @@ from app.schemas.models import (
     OwnerEdit,
     ResetIssue,
     StaffActive,
+    StaffApprove,
     StaffCreate,
     VoidInvoice,
     ApprovalDecision,
@@ -451,6 +454,16 @@ def staff_add(payload: StaffCreate):
 @router.post("/admin/staff/{staff_id}/active")
 def staff_active(staff_id: str, payload: StaffActive, request: Request):
     return service_call(set_staff_active, staff_id, payload.active, getattr(request.state, "staff_id", None))
+
+
+@router.post("/admin/staff/{staff_id}/approve")
+def staff_approve_route(staff_id: str, payload: StaffApprove):
+    return service_call(staff_approve, staff_id, payload.dict())
+
+
+@router.delete("/admin/staff/{staff_id}")
+def staff_delete_route(staff_id: str):
+    return service_call(staff_delete, staff_id)
 
 
 @router.get("/admin/resets")

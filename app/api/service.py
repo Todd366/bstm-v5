@@ -818,3 +818,16 @@ def owner_delete(data, by="owner"):
 
 def owner_edit(kind, record_id, data, by="owner"):
     return owner_service.update_record(kind, record_id, {k: v for k, v in data.items() if v is not None}, actor=by)
+
+
+def staff_signup(data):
+    staff_service.signup_staff(data["name"], data["email"], data["password"])
+    return {"status": "waiting_for_approval"}
+
+
+def staff_approve(staff_id, data):
+    return staff_service.approve_staff(staff_id, data["role"])
+
+
+def staff_delete(staff_id):
+    return staff_service.delete_staff(staff_id)

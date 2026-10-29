@@ -59,7 +59,7 @@ const API = (m, u, h, body) => {
   if (p === "/staff/login") return ok({ access_token: "st", token_type: "bearer", name: "Tau", role: "owner" });
   if (p === "/admin/resets" && m === "GET") return ok([]);
   if (p === "/admin/resets" && m === "POST") return ok({ code: "ABCD2345", expires_in_hours: 24 });
-  if (p === "/admin/staff" && m === "GET") return ok([{ id: "s1", name: "Tau", email: "tau@bstm.test", role: "admin", active: true, last_login_at: null }]);
+  if (p === "/admin/staff" && m === "GET") return ok([{ id: "s1", name: "Tau", email: "tau@bstm.test", role: "admin", active: true, approved: true, last_login_at: null }, { id: "s2", name: "Pending Pat", email: "pat@bstm.test", role: "support", active: false, approved: false, last_login_at: null }]);
   if (p === "/admin/scorecard") return ok({ overall: "WARN", checks: [{ name: "Ledger balance", status: "OK", detail: "no invoice is over-paid" }] });
   if (p === "/admin/owner/records") return ok([{ id: "y1", name: "Auth Test User", email: "a@example.com", location: "Gaborone", can_login: true, jobs: 0, money_records: 0, suggested_test: ["name looks like a test"] }, { id: "y2", name: "Real Person", email: "r@gmail.com", location: "Maun", can_login: true, jobs: 1, money_records: 0, suggested_test: [] }]);
   if (p === "/admin/owner/delete") return ok({ removed: ["y1"], kept_because_of_money: [] });
@@ -169,6 +169,7 @@ await page.getByRole("button", { name: "Log out" }).click();
 // ---- staff
 await page.waitForSelector("text=Welcome to BSTM Activation");
 await click("Staff sign in");
+check("staff login offers account request", await text("Create a staff account"));
 await page.fill("[name=email]", "tau@bstm.test"); await page.fill("[name=password]", "correct-horse-battery"); await page.locator("form button[type=submit]").click();
 await page.waitForSelector("text=Database update needed");
 check("staff sees database update screen", await text("20261016000000"));
@@ -186,7 +187,7 @@ await tab("Resets"); await page.waitForSelector("text=Password reset code");
 await page.fill("[name=email]", "kid@example.com"); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD2345");
 check("reset code shown once", await text("Code (shown once)"));
 await tab("Team"); await page.waitForSelector("text=Add a team member");
-check("team lists staff", await text("tau@bstm.test"));
+check("team lists staff, built-in owner, pending request", (await text("tau@bstm.test")) && (await text("Owner (built in)")) && (await text("Waiting for approval")));
 await tab("System"); await page.waitForSelector("text=System check");
 check("system check lists measured items", await text("Ledger balance"));
 await tab("Owner"); await page.waitForSelector("text=1 look like tests");

@@ -134,3 +134,8 @@ def test_throttled_ip_gets_429():
         assert out["status"] == 429
     finally:
         mw.check_rate_limit = original
+
+
+def test_public_staff_signup_route_is_open_and_rate_limited_path():
+    assert call("POST", "/staff/signup")[0] == 200
+    assert call("GET", "/staff/signup")[0] == 401
