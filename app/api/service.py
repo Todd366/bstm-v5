@@ -269,6 +269,9 @@ def get_my_trial(youth_id, trial_id):
 
 
 def submit_my_trial(youth_id, trial_id, submission):
+    if isinstance(submission, dict) and submission.get("type") == "field_card":
+        from app.services.field_card import normalise_field_card
+        submission = normalise_field_card(submission)
     result = submit_trial(trial_id, submission, acting_youth_id=youth_id)
 
     # The link they gave becomes evidence on this trial, so whoever

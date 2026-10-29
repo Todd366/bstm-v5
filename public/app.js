@@ -460,7 +460,7 @@
         if (a.status === "Pending" && a.opportunity_status !== "Assigned") act(t("Withdraw"), base + "/withdraw", "sec", "Application withdrawn.");
         if (a.status === "Accepted" && !a.trial_id) { act("Start work", base + "/trial", "", "Work started."); act(t("Withdraw"), base + "/withdraw", "sec", "Withdrawn."); }
         if (a.trial_id && a.trial_status === "Active") {
-          card.appendChild(submitForm(a.trial_id));
+          card.appendChild(submitForm(a.trial_id, r[1]));
           var stop = h("button", { class: "btn sm sec", type: "button", text: "Stop this work" });
           stop.addEventListener("click", function () {
             if (!window.confirm("Stop this work? Stopping after you started lowers your reliability score.")) return;
@@ -471,6 +471,7 @@
         if (a.status === "Completed") card.appendChild(h("p", { class: "m" }, "Done. See Money for your payout."));
         node.appendChild(card);
       });
+      var pt = patternTracker(r[1]); if (pt) node.appendChild(pt);
       show(node);
     });
   }
@@ -478,19 +479,110 @@
     if (a.trial_status && a.status === "Accepted") return { Active: "In progress", Submitted: "Submitted – waiting for review", "Under Review": "Being reviewed", Completed: "Completed", Cancelled: "Cancelled" }[a.trial_status] || a.trial_status;
     return { Pending: "Waiting for BSTM", Accepted: "Accepted", Declined: "Declined", Cancelled: "Withdrawn", Completed: "Completed" }[a.status] || a.status;
   }
-  function submitForm(trialId) {
-    var f = h("form", { novalidate: true }, h("label", { text: "What did you do? Add a link to your work if you have one." }),
-      h("textarea", { name: "summary", maxlength: 1500 }), h("input", { name: "link", type: "url", placeholder: "https://… (optional)", maxlength: 500, inputmode: "url" }),
-      h("button", { class: "btn", type: "submit", text: "Submit my work" }));
+  // ---------- the BSTM 100 Trials field card (card + exit snapshot) ----------
+  var FC = {
+    btype: ["retail", "salon", "food", "services", "other"], size: ["S", "M", "L"],
+    entry_type: ["walk-in", "invited", "waited", "redirected"], reaction: ["friendly", "neutral", "defensive", "busy"],
+    environment: ["busy", "calm", "chaotic"], interest: ["yes", "no", "neutral"], "return": ["yes", "no"]
+  };
+  var FC_QUESTIONS = ["How do customers usually find you?", "What time / situation is your busiest?", "What is the hardest part of running this?", "What usually causes delays or mistakes?"];
+  function fcCards(trials) { return (trials || []).filter(function (x) { return x.submission && x.submission.type === "field_card"; }).map(function (x) { return x.submission; }); }
+  function submitForm(trialId, trials) {
+    var draftKey = "bstm-card-" + trialId, st = {}, asked = [false, false, false, false];
+    try { var d0 = JSON.parse(localStorage.getItem(draftKey) || "{}"); st = d0.st || {}; asked = d0.asked || asked; } catch (e) { }
+    var f = h("form", { novalidate: true, class: "fcard" });
+    var save = function () { try { var o = { st: st, asked: asked }; f.querySelectorAll("input[name],textarea[name]").forEach(function (el) { o[el.name] = el.value; }); localStorage.setItem(draftKey, JSON.stringify(o)); } catch (e) { } };
+    var saved = {}; try { saved = JSON.parse(localStorage.getItem(draftKey) || "{}"); } catch (e) { }
+    function sec(title, note) { f.appendChild(h("h3", { text: title })); if (note) f.appendChild(h("p", { class: "m", text: note })); }
+    function text(name, label, long, ph) {
+      f.appendChild(h("label", { text: label }));
+      var el = h(long ? "textarea" : "input", { name: name, maxlength: 400, placeholder: ph || "" }); el.value = saved[name] || ""; el.addEventListener("input", save); f.appendChild(el);
+    }
+    function pick(name, label) {
+      f.appendChild(h("label", { text: label }));
+      var row = h("div", { class: "chips", role: "group", "aria-label": label });
+      FC[name].forEach(function (o) {
+        var b = h("button", { type: "button", class: "chip", text: o, "aria-pressed": st[name] === o ? "true" : "false" });
+        b.addEventListener("click", function () { st[name] = st[name] === o ? "" : o; row.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", c.textContent === st[name] ? "true" : "false"); }); save(); });
+        row.appendChild(b);
+      });
+      f.appendChild(row);
+    }
+    var n = fcCards(trials).length + 1, today = new Date().toISOString().slice(0, 10);
+    f.appendChild(h("h2", { text: "Field card · Trial #" + n }));
+    f.appendChild(h("p", { class: "m", text: "In the field I collect. Outside the field I think. Your answers save on this phone as you type." }));
+    sec("1. Identification");
+    text("business", "Business name"); pick("btype", "Type"); pick("size", "Size"); text("location", "Location (village / town / area)");
+    f.appendChild(h("label", { text: "Date" })); var dt = h("input", { name: "date", type: "date" }); dt.value = saved.date || today; dt.addEventListener("input", save); f.appendChild(dt);
+    sec("2. Entry context"); pick("entry_type", "Entry type"); pick("reaction", "Reaction"); text("first_contact", "First contact (what happened in the first minute)");
+    sec("3. Core questions", "Tick each one when you asked it.");
+    FC_QUESTIONS.forEach(function (q, i) {
+      var cb = h("input", { type: "checkbox", id: "q" + i, style: "width:auto;min-height:0;margin-right:8px" }); cb.checked = !!asked[i];
+      cb.addEventListener("change", function () { asked[i] = cb.checked; save(); });
+      f.appendChild(h("label", { for: "q" + i, style: "font-weight:400" }, cb, q));
+    });
+    sec("4. Raw quotes", "Exact words only. No interpretation.");
+    [1, 2, 3].forEach(function (i) { text("quote" + i, "Quote " + i, false, "“…”"); });
+    sec("5. Observation", "What you see, not what they say.");
+    text("customer_flow", "Customer flow"); text("staff_behavior", "Staff behavior"); text("bottleneck", "Bottleneck"); pick("environment", "Environment");
+    sec("Exit snapshot", "Fill this in outside, within 5 minutes of leaving.");
+    text("core_problem", "Core problem (one sentence)", true); text("insight", "Insight (what it means)", true);
+    text("struggle", "This business mainly struggles with…"); text("when", "…especially when this happens:");
+    pick("interest", "Interest?"); pick("return", "Return?");
+    f.appendChild(h("label", { text: "Scores (1–10): A, T, D" }));
+    var sr = h("div", { class: "chips" });
+    ["a", "t", "d"].forEach(function (k) { var el = h("input", { name: "score_" + k, type: "number", min: 1, max: 10, inputmode: "numeric", placeholder: k.toUpperCase(), "aria-label": "Score " + k.toUpperCase(), style: "width:30%" }); el.value = saved["score_" + k] || ""; el.addEventListener("input", save); sr.appendChild(el); });
+    f.appendChild(sr);
+    f.appendChild(h("p", { class: "m", text: "Rules: no pitching. No system mentions. No analysis inside the shop. One business = one core problem." }));
+    text("link", "Link to photos or notes (optional)");
+    f.appendChild(h("button", { class: "btn", type: "submit", text: "Submit trial" }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault();
-      var summary = val(f, "summary"), link = val(f, "link");
-      if (!summary) return say("Please describe what you did.", true);
-      if (link && !/^https?:\/\//i.test(link)) return say("The link must start with http:// or https://", true);
-      busy(f.querySelector("button"), api("/me/trials/" + encodeURIComponent(trialId) + "/submit", { body: { submission: { summary: summary, link: link || null } } }))
-        .then(function () { say("Submitted! BSTM will review it."); route(); }).catch(fail);
+      var q = [1, 2, 3].map(function (i) { return val(f, "quote" + i); }).filter(Boolean);
+      var card = {
+        type: "field_card", trial_no: n, date: val(f, "date"), business: val(f, "business"), btype: st.btype || "", size: st.size || "", location: val(f, "location"),
+        entry_type: st.entry_type || "", reaction: st.reaction || "", first_contact: val(f, "first_contact"), asked: asked, quotes: q,
+        customer_flow: val(f, "customer_flow"), staff_behavior: val(f, "staff_behavior"), bottleneck: val(f, "bottleneck"), environment: st.environment || "",
+        core_problem: val(f, "core_problem"), insight: val(f, "insight"), struggle: val(f, "struggle"), when: val(f, "when"),
+        interest: st.interest || "", "return": st["return"] || "", scores: { a: val(f, "score_a"), t: val(f, "score_t"), d: val(f, "score_d") }, link: val(f, "link")
+      };
+      var need = [["business", "business name"], ["btype", "business type"], ["location", "location"], ["entry_type", "entry type"], ["reaction", "reaction"], ["core_problem", "core problem"], ["insight", "insight"], ["interest", "interest"], ["return", "return"]];
+      for (var i = 0; i < need.length; i++) if (!card[need[i][0]]) return say("Please fill in: " + need[i][1] + ".", true);
+      if (!q.length) return say("Write at least one exact quote, in their words.", true);
+      busy(f.querySelector("button[type=submit]"), api("/me/trials/" + encodeURIComponent(trialId) + "/submit", { body: { submission: card } }))
+        .then(function () { try { localStorage.removeItem(draftKey); } catch (e) { } say("Trial #" + n + " submitted. BSTM will review it."); route(); }).catch(fail);
     });
     return f;
+  }
+  // read-only view of a submitted card (youth tracker, business and staff review)
+  function cardView(sub) {
+    if (!sub || sub.type !== "field_card") return null;
+    var rows = [["Business", [sub.business, sub.btype, sub.size && "size " + sub.size, sub.location].filter(Boolean).join(" · ")],
+      ["Entry", [sub.entry_type, sub.reaction].filter(Boolean).join(" · ")], ["Core problem", sub.core_problem], ["Insight", sub.insight],
+      ["Summary", sub.struggle ? "Mainly struggles with " + sub.struggle + (sub.when ? ", especially when " + sub.when : "") + "." : ""],
+      ["Quotes", (sub.quotes || []).map(function (x) { return "“" + x + "”"; }).join("  ")], ["Seen", [sub.customer_flow, sub.staff_behavior, sub.bottleneck, sub.environment].filter(Boolean).join(" · ")],
+      ["Interest / return", [sub.interest, sub.return].join(" / ")], ["Scores", ["a", "t", "d"].map(function (k) { return sub.scores && sub.scores[k] ? k.toUpperCase() + ": " + sub.scores[k] : ""; }).filter(Boolean).join("  ")]];
+    var box = h("div", null);
+    rows.forEach(function (r) { if (r[1]) box.appendChild(h("p", null, h("strong", { text: r[0] + ": " }), r[1])); });
+    return box;
+  }
+  var STOP = "the a an and or of to in on at is it for with that this they their them are was be have has not no but as by from we you our your can very more often when what which who how".split(" ");
+  function patternTracker(trials) {
+    var cards = fcCards(trials).sort(function (a, b) { return (a.trial_no || 0) - (b.trial_no || 0); });
+    if (!cards.length) return null;
+    var box = h("div", { class: "card" }, h("h2", { text: "Pattern tracker" }), h("p", { class: "m", text: "Look for repetition, not perfection." }));
+    cards.forEach(function (c) { box.appendChild(h("p", null, h("strong", { text: "#" + c.trial_no + " " }), [c.business, c.btype, c.date].filter(Boolean).join(" · "), h("br"), c.core_problem, c.insight ? h("span", { class: "m", text: " → " + c.insight }) : null)); });
+    if (cards.length >= 10) {
+      var types = {}, words = {};
+      cards.forEach(function (c) { types[c.btype] = (types[c.btype] || 0) + 1; var seen = {}; (c.core_problem + " " + (c.struggle || "")).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).forEach(function (w) { if (w.length > 3 && STOP.indexOf(w) < 0 && !seen[w]) { seen[w] = 1; words[w] = (words[w] || 0) + 1; } }); });
+      var top = Object.keys(words).filter(function (w) { return words[w] >= 3; }).sort(function (a, b) { return words[b] - words[a]; }).slice(0, 3);
+      var tt = Object.keys(types).sort(function (a, b) { return types[b] - types[a]; })[0];
+      box.appendChild(h("h3", { text: "After 10 trials" }));
+      box.appendChild(h("p", null, h("strong", { text: "Problems that repeated: " }), top.length ? top.join(", ") : "none yet"));
+      box.appendChild(h("p", null, h("strong", { text: "Business type met most: " }), tt));
+      box.appendChild(h("p", { class: "m", text: top.length ? "Repetition found → start thinking about solutions." : "No repetition → continue trials or refine which businesses you approach." }));
+    } else box.appendChild(h("p", { class: "m", text: (10 - cards.length) + " more trials until your first analysis." }));
+    return box;
   }
 
   var KINDS = ["Portfolio", "Screenshot", "Document", "BusinessApproval", "Assessment", "Transaction", "Other"];
@@ -769,7 +861,7 @@
         }
         if (p.trial_status === "Submitted" || p.trial_status === "Under Review") {
           var sub = p.submission || {};
-          row.appendChild(h("p", null, h("strong", { text: "Work submitted: " }), sub.summary || ""));
+          row.appendChild(h("p", null, h("strong", { text: "Work submitted: " }), sub.type === "field_card" ? "" : (sub.summary || ""))); var cv = cardView(sub); if (cv) row.appendChild(cv);
           row.appendChild(h("p", null, safeLink(sub.link)));
           var score = h("input", { type: "number", min: 0, max: 100, placeholder: "Score 0–100", inputmode: "numeric", "aria-label": "Score" });
           var ok = h("button", { class: "btn sm", type: "button", text: "Approve work" });
@@ -1102,7 +1194,7 @@
       qd.trials.forEach(function (t2, idx) {
         var sub = t2.submission || {};
         var card = h("div", { class: "card" }, h("h3", { text: t2.youth_name + " — " + t2.opportunity_title }),
-          h("span", { class: "tag warn", text: t2.status }), sub.summary ? h("p", { text: sub.summary }) : null, h("p", null, safeLink(sub.link)),
+          h("span", { class: "tag warn", text: t2.status }), sub.type === "field_card" ? cardView(sub) : (sub.summary ? h("p", { text: sub.summary }) : null), h("p", null, safeLink(sub.link)),
           (evs[idx] || []).map(function (e) { return h("p", { class: "m" }, "Proof: " + e.kind + (e.notes ? " – " + e.notes : "") + " ", safeLink(e.url)); }));
         if (t2.status === "Submitted") aact(card, "Start review", "/trials/" + t2.trial_id + "/review", { review: {} }, "", "Review started.");
         else {

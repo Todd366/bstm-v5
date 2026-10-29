@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.1
+- Trial form is now the full BSTM 100 Trials field card: identification, entry context, core questions, raw quotes, observation, exit snapshot (problem, insight, summary, interest, return, scores). Saves a draft on the phone while typing; checked on the server.
+- Pattern tracker on My work (trial log, and after 10 trials the repeated problems and most-met business type). Business and staff see the card in full.
+- No database change.
+
 ## 5.9.0
 - Jobs can name the skills they need (up to 5). Matching uses them exactly: coverage, level, BSTM-verified, and area; explains what is still missing. Jobs without named skills still use text matching.
 - Business "Post a job" has a skill picker; job cards show "Skills needed".

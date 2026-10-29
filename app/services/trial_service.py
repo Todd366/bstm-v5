@@ -409,6 +409,7 @@ def list_youth_trials(youth_id):
                 o.title AS opportunity_title,
                 t.title,
                 t.status,
+                t.submission,
                 t.created_at,
                 t.started_at,
                 t.submitted_at,

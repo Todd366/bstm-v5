@@ -134,7 +134,7 @@ await page.fill("[name=q]", "web"); await page.fill("[name=location]", "Maun");
 await page.getByRole("button", { name: "Search" }).click(); await page.waitForTimeout(300);
 check("job search sends q + location", seen.some((s) => s.p === "/me/opportunities/browse" && s.q.includes("q=web") && s.q.includes("location=Maun")));
 await tab("My work"); await page.waitForSelector("text=Paint wall");
-check("my work: submit form, stop work, done message", (await text("Submit my work")) && (await text("Stop this work")) && (await text("See Money")));
+check("my work: submit form, stop work, done message", (await text("Submit trial")) && (await text("Exit snapshot")) && (await text("Raw quotes")) && (await text("Stop this work")) && (await text("See Money")));
 await page.locator("#bellBtn").click(); await page.waitForSelector("text=You got the job");
 check("alerts list", await text("You got the job"));
 await page.evaluate(() => { location.hash = "#/p/11111111-1111-1111-1111-111111111111"; });
