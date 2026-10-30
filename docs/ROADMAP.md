@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.9.0)
+## Current state (v5.10.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -33,7 +33,7 @@ Known suspects to test first:
 - [x] Support/finance no longer see youth `intake` (v5.8.0).
 - [x] Deleted youth excluded from lists and counts (v5.6.0). [ ] Confirm they vanish from matching, lists, public profile, candidate lists.
 - [ ] Invoice void then re-completion: confirm a replacement invoice is possible and idempotent.
-- [ ] Rate-limit table growth: add scheduled cleanup of old `rate_limit_events`.
+- [x] Rate-limit table growth: old rows are deleted as part of normal checks.
 - [ ] Staff token lookup hits the DB on every staff request: measure; cache for a few seconds if slow.
 - [ ] Time zones: all dates stored UTC, displayed in Africa/Gaborone.
 - [ ] Money rounding and currency (BWP, 2 decimals) across split, payouts, reports.
@@ -46,7 +46,7 @@ Known suspects to test first:
 - [ ] Phone-number login / OTP (needs SMS provider).
 - [x] Structured job requirements (v5.9.0). [ ] Staff-side picker when staff post a job; [ ] show requirements to staff in the queue.
 - [ ] Field audit -> suggested jobs -> business confirmation loop (reuse existing audit and diagnosis services).
-- [ ] Reports: monthly numbers for BSTM (people helped, jobs, money moved, verified skills) from live data.
+- [x] Reports: monthly numbers (v5.10.0). [ ] CSV export; [ ] per-town breakdown of jobs and money.
 - [ ] Public verification: shareable proof page for a youth's verified work (opt-in, exists as public profile; extend with evidence).
 
 ## Phase 4: Production hardening

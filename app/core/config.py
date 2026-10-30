@@ -10,7 +10,7 @@ def _int(name, default):
 
 APP_NAME = os.getenv("BSTM_APP_NAME", "BSTM Platform")
 
-APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.9.1")
+APP_VERSION = os.getenv("BSTM_APP_VERSION", "5.10.0")
 
 ENVIRONMENT = os.getenv("BSTM_ENVIRONMENT", "development")
 

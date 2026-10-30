@@ -801,6 +801,13 @@ def void_invoice(invoice_id, data, by="staff"):
     return {"status": "void", "id": payment_service.void_invoice(invoice_id, data["reason"], voided_by=by)}
 
 
+def get_report(month=None):
+    from app.services.report_service import monthly_report, report_text
+    r = monthly_report(month)
+    r["text"] = report_text(r)
+    return r
+
+
 def get_scorecard():
     return scorecard_service.scorecard()
 

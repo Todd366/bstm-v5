@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.10.0
+- Staff **Reports** tab (admin, finance): pick a month and see new people, new businesses, jobs posted, work submitted/approved, field cards, money received, paid to young people, where people joined from, and all-time totals. Copy-ready summary text. All counted from live records on Africa/Gaborone months.
+- No database change.
+
 ## 5.9.1
 - Trial form is now the full BSTM 100 Trials field card: identification, entry context, core questions, raw quotes, observation, exit snapshot (problem, insight, summary, interest, return, scores). Saves a draft on the phone while typing; checked on the server.
 - Pattern tracker on My work (trial log, and after 10 trials the repeated problems and most-met business type). Business and staff see the card in full.

@@ -13,6 +13,7 @@ from app.api.service import (
     staff_approve,
     staff_delete,
     get_open_resets,
+    get_report,
     get_scorecard,
     get_staff,
     issue_reset_code,
@@ -487,6 +488,11 @@ def resets_list():
 @router.post("/admin/resets", status_code=201)
 def reset_issue(payload: ResetIssue, request: Request):
     return service_call(issue_reset_code, payload.dict(), _actor(request))
+
+
+@router.get("/admin/report")
+def report(month: str = ""):
+    return service_call(get_report, month or None)
 
 
 @router.get("/admin/scorecard")

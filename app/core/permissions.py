@@ -18,6 +18,7 @@ RULES = [
     ("/admin/queue", None, ALL),
     ("/admin/stats", None, ALL),
     ("/admin/activity", None, ALL),
+    ("/admin/report", None, {"admin", "finance"}),
     ("/admin/resets", None, {"admin", "support"}),
     ("/invoices", None, MONEY),
     ("/payments", None, MONEY),

@@ -311,8 +311,8 @@
 
   // ---------- app shell ----------
   var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["money", "💰", "Money"], ["me", "👤", "Me"]];
-  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["sys", "✅", "System"], ["owner", "👑", "Owner"]];
-  var AROLE = { owner: null, admin: ["queue", "money", "biz", "jobs", "youth", "audit", "reset", "sys"], finance: ["queue", "money"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
+  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["rep", "📊", "Reports"], ["sys", "✅", "System"], ["owner", "👑", "Owner"]];
+  var AROLE = { owner: null, admin: ["queue", "money", "biz", "jobs", "youth", "audit", "reset", "rep", "sys"], finance: ["queue", "money", "rep"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
   function atabAllowed(k) { if (S.adminKey && !S.staffToken) return true; var r = AROLE[S.staffRole]; return r === undefined ? false : (r === null || r.indexOf(k) >= 0); }
   var BTABS = [["bjobs", "💼", "Jobs"], ["bpost", "➕", "Post a job"], ["binv", "🧾", "Invoices"]];
   function drawTabs() {
@@ -1013,7 +1013,7 @@
         function () { S.migOk = true; route(); });
     }
     show(h("div", { class: "spin", text: t("Loading…") }));
-    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, sys: aSys, owner: aOwner }[S.atab] || aQueue)().catch(function (e) {
+    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, rep: aRep, sys: aSys, owner: aOwner }[S.atab] || aQueue)().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);
       show(h("div", { class: "card empty" }, h("p", { text: e.message }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
     });
@@ -1085,6 +1085,30 @@
         del(card, m);
         node.appendChild(card);
       });
+      show(node);
+    });
+  }
+  function aRep() {
+    var now = new Date(), opts = [];
+    for (var i = 0; i < 12; i++) { var d = new Date(now.getFullYear(), now.getMonth() - i, 1); opts.push(d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2)); }
+    var month = S.rmonth || opts[0];
+    return A("/admin/report?month=" + month).then(function (r) {
+      var sel = h("select", { "aria-label": "Month" }, opts.map(function (o) { return h("option", { value: o, text: o, selected: o === month ? "selected" : null }); }));
+      sel.addEventListener("change", function () { S.rmonth = sel.value; route(); });
+      var copy = h("button", { class: "btn sm", type: "button", text: "Copy summary" });
+      copy.addEventListener("click", function () { (navigator.clipboard ? navigator.clipboard.writeText(r.text) : Promise.reject()).then(function () { say("Copied."); }).catch(function () { say("Could not copy. Select the text and copy it.", true); }); });
+      var tile = function (n, l) { return h("div", { class: "card" }, h("h2", { text: String(n) }), h("p", { class: "m", text: l })); };
+      var pula = function (n) { return "P" + Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var node = h("div", null, h("h1", { text: "Reports" }), h("p", { class: "m", text: "Counted from live records, Africa/Gaborone time." }), sel,
+        tile(r.people_joined, "New people"), tile(r.businesses_joined, "New businesses"), tile(r.jobs_posted, "Jobs posted"),
+        tile(r.work_submitted + " submitted · " + r.work_approved + " approved", "Work (" + r.field_cards + " field cards)"),
+        tile(pula(r.money_received), "Money received"), tile(pula(r.paid_to_youth), "Paid to young people"),
+        h("h2", { text: "Where new people joined from" }));
+      if (!r.places.length) node.appendChild(empty("Nobody joined this month."));
+      r.places.forEach(function (p) { node.appendChild(h("p", { class: "m", text: p.location + " · " + p.people })); });
+      node.appendChild(h("h2", { text: "All time" }));
+      node.appendChild(h("p", { class: "m", text: r.total.people + " people · " + r.total.businesses + " businesses · " + r.total.verified_skills + " verified skills · " + r.total.jobs_done + " jobs done" }));
+      node.appendChild(h("pre", { text: r.text, style: "white-space:pre-wrap" })); node.appendChild(copy);
       show(node);
     });
   }
