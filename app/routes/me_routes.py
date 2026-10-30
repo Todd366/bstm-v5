@@ -5,6 +5,7 @@ the id comes from the token, never from the URL."""
 from fastapi import APIRouter, Query, Request
 
 from app.api.service import (
+    change_my_password,
     delete_my_account,
     export_my_data,
     accept_my_assignment,
@@ -40,6 +41,7 @@ from app.schemas.models import (
     ProfileUpdate,
     MyEvidenceSubmit,
     TrialCancel,
+    PasswordChange,
     TrialSubmission,
 )
 
@@ -181,3 +183,8 @@ def export(request: Request):
 @router.post("/delete")
 def delete_account(payload: DeleteAccount, request: Request):
     return service_call(delete_my_account, youth_id_of(request), payload.dict())
+
+
+@router.put("/password")
+def password_change(payload: PasswordChange, request: Request):
+    return service_call(change_my_password, youth_id_of(request), payload.dict())

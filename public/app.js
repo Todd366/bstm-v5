@@ -312,8 +312,8 @@
 
   // ---------- app shell ----------
   var TABS = [["home", "🏠", "Home"], ["jobs", "🔎", "Jobs"], ["work", "💼", "My work"], ["money", "💰", "Money"], ["me", "👤", "Me"]];
-  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["rep", "📊", "Reports"], ["sys", "✅", "System"], ["owner", "👑", "Owner"]];
-  var AROLE = { owner: null, admin: ["queue", "money", "biz", "jobs", "youth", "audit", "reset", "rep", "sys"], finance: ["queue", "money", "rep"], field: ["queue", "biz", "jobs", "youth", "audit"], support: ["queue", "youth", "reset"] };
+  var ATABS = [["queue", "📋", "Queue"], ["money", "💰", "Money"], ["biz", "🏪", "Businesses"], ["jobs", "💼", "Jobs"], ["youth", "👥", "Youth"], ["audit", "📝", "Audit"], ["reset", "🔑", "Resets"], ["team", "🛡️", "Team"], ["agent", "📱", "Register"], ["rep", "📊", "Reports"], ["sys", "✅", "System"], ["owner", "👑", "Owner"]];
+  var AROLE = { owner: null, admin: ["queue", "money", "biz", "jobs", "youth", "audit", "reset", "agent", "rep", "sys"], finance: ["queue", "money", "rep"], field: ["queue", "biz", "jobs", "youth", "audit", "agent"], agent: ["agent"], support: ["queue", "youth", "reset"] };
   function atabAllowed(k) { if (S.adminKey && !S.staffToken) return true; var r = AROLE[S.staffRole]; return r === undefined ? false : (r === null || r.indexOf(k) >= 0); }
   var BTABS = [["bjobs", "💼", "Jobs"], ["bpost", "➕", "Post a job"], ["binv", "🧾", "Invoices"]];
   function drawTabs() {
@@ -366,7 +366,7 @@
       var active = as.filter(function (a) { return a.status === "Accepted"; });
       var pending = as.filter(function (a) { return a.status === "Pending"; });
       var node = h("div", null,
-        h("h1", { text: (S.lang === "tn" ? "Dumela, " : "Hello, ") + p.name.split(" ")[0] }),
+        h("h1", { text: (S.lang === "tn" ? "Dumela, " : "Hello, ") + p.name.split(" ")[0] }), p.must_change_password ? pwCard(p) : null,
         h("div", { class: "card" }, h("h3", { text: "Your level" }), h("p", { text: p.level || "Beginner" }),
           h("div", { class: "stat" },
             stat(p.completed_trials, "Trials done"), stat(p.completed_opportunities, "Jobs done"), stat(Math.round(p.reputation_score || 0), "Reputation"), stat(pula(p.revenue), "Paid to you"))));
@@ -674,6 +674,20 @@
     });
   }
 
+  function pwCard(p) {
+    var err = h("p", { class: "err", role: "alert" });
+    var f = h("form", { class: "card", novalidate: true }, h("h3", { text: p && p.must_change_password ? "Choose your own password" : "Change password" }),
+      p && p.must_change_password ? h("p", { class: "m", text: "Someone helped you register. Choose a password only you know." }) : null,
+      field("Current password", "current", "password", { ac: "current-password", max: 128 }), field("New password (8+ characters)", "newpw", "password", { ac: "new-password", max: 128 }), err,
+      h("button", { class: "btn", type: "submit", text: "Save password" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault(); err.textContent = "";
+      var cur = f.querySelector("[name=current]").value, nw = f.querySelector("[name=newpw]").value;
+      if (!cur || nw.length < 8) return (err.textContent = "Enter your current password and a new one of at least 8 characters.");
+      busy(f.querySelector("button"), api("/me/password", { method: "PUT", body: { current: cur, "new": nw } })).then(function () { say("Password changed."); route(); }).catch(function (e) { err.textContent = e.message; });
+    });
+    return f;
+  }
   function profileView() {
     return profile().then(function (p) {
       var err = h("p", { class: "err", role: "alert" });
@@ -696,7 +710,8 @@
         if (!body.location) return (err.textContent = "Please enter where you live.");
         busy(f.querySelector("button[type=submit]"), api("/me/profile", { method: "PUT", body: body })).then(function () { say("Profile saved."); route(); }).catch(function (x) { err.textContent = x.message; });
       });
-      var node = h("div", null, subNav("profile"), f);
+      var node = h("div", null, subNav("profile"), p.must_change_password ? pwCard(p) : null, f);
+      if (!p.must_change_password) node.appendChild(pwCard(p));
       var dpw = h("input", { type: "password", autocomplete: "current-password", maxlength: 128, "aria-label": "Your password", placeholder: "Your password" });
       var dErr = h("p", { class: "err", role: "alert" });
       node.appendChild(h("div", { class: "card" }, h("h3", { text: "Your data" }),
@@ -962,7 +977,7 @@
       ev.preventDefault(); err.textContent = "";
       var btn = f.querySelector("button[type=submit]");
       busy(btn, api("/staff/login", { anon: true, body: { email: val(f, "email"), password: f.querySelector("[name=password]").value } })).then(function (r) {
-        S.staffToken = r.access_token; S.staffRole = r.role; S.staffName = r.name; S.adminKey = null; S.atab = "queue";
+        S.staffToken = r.access_token; S.staffRole = r.role; S.staffName = r.name; S.adminKey = null; S.atab = r.role === "agent" ? "agent" : "queue";
         keep({ token: r.access_token, role: r.role, name: r.name }); route();
       }).catch(function (e) { err.textContent = e.message; });
     });
@@ -1014,7 +1029,7 @@
         function () { S.migOk = true; route(); });
     }
     show(h("div", { class: "spin", text: t("Loading…") }));
-    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, rep: aRep, sys: aSys, owner: aOwner }[S.atab] || aQueue)().catch(function (e) {
+    ({ queue: aQueue, money: aMoney, biz: aBiz, jobs: aJobs, youth: aYouth, audit: aAudit, reset: aReset, team: aTeam, rep: aRep, agent: aAgent, sys: aSys, owner: aOwner }[S.atab] || (S.staffRole === "agent" ? aAgent : aQueue))().catch(function (e) {
       if (e && (e.status === 401 || e.status === 403)) return fail(e);
       show(h("div", { class: "card empty" }, h("p", { text: e.message }), h("button", { class: "btn", type: "button", text: "Try again", onclick: route })));
     });
@@ -1042,9 +1057,9 @@
   function aTeam() {
     return A("/admin/staff").then(function (list) {
       var err = h("p", { class: "err", role: "alert" });
-      var role = h("select", { "aria-label": "Role" }, ["finance", "field", "support", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
+      var role = h("select", { "aria-label": "Role" }, ["finance", "field", "support", "agent", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
       var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Add a team member" }),
-        h("p", { class: "m", text: "finance: money. field: jobs, trials, audits. support: resets and viewing people. admin: everything." }),
+        h("p", { class: "m", text: "finance: money. field: jobs, trials, audits. support: resets and viewing people. agent: registers people on their phone. admin: everything." }),
         field("Name", "name", "text", { max: 120 }), field("Email", "email", "email", { max: 254, im: "email" }), field("Password (12+ characters)", "password", "password", { ac: "new-password", max: 128 }), role, err,
         h("button", { class: "btn", type: "submit", text: "Add" }));
       f.addEventListener("submit", function (ev) {
@@ -1065,7 +1080,7 @@
       list.forEach(function (m) {
         var card = h("div", { class: "card" }, h("h3", { text: m.name }), h("p", { class: "m", text: m.email + " · last in " + (m.last_login_at ? when(m.last_login_at) : "never") }));
         if (m.approved === false) {
-          var rs = h("select", { "aria-label": "Role" }, ["support", "field", "finance", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
+          var rs = h("select", { "aria-label": "Role" }, ["support", "field", "finance", "agent", "admin"].map(function (x) { return h("option", { value: x, text: x }); }));
           card.appendChild(h("p", null, h("span", { class: "tag warn", text: "Waiting for approval" })));
           card.appendChild(rs);
           var ok = h("button", { class: "btn sm", type: "button", text: "Approve" });
@@ -1110,6 +1125,36 @@
       node.appendChild(h("h2", { text: "All time" }));
       node.appendChild(h("p", { class: "m", text: r.total.people + " people · " + r.total.businesses + " businesses · " + r.total.verified_skills + " verified skills · " + r.total.jobs_done + " jobs done" }));
       node.appendChild(h("pre", { text: r.text, style: "white-space:pre-wrap" })); node.appendChild(copy);
+      show(node);
+    });
+  }
+  function aAgent() {
+    return A("/admin/agent/people").then(function (people) {
+      var err = h("p", { class: "err", role: "alert" }), shown = h("div");
+      var cons = h("input", { type: "checkbox", id: "f_cons", style: "width:auto;min-height:0" });
+      var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Register a person" }),
+        h("p", { class: "m", text: "Sit with them. They give you their details and agree. You never choose their password." }),
+        field("Full name", "name", "text", { max: 120 }), field("Phone number", "phone", "tel", { max: 30, im: "tel" }),
+        field("Village or town", "location", "text", { max: 120, list: "places" }), h("datalist", { id: "places" }, PLACES.map(function (x) { return h("option", { value: x }); })),
+        field("What work do they want? (optional)", "goal", "text", { max: 200 }),
+        h("label", { for: "f_cons", style: "font-weight:400" }, cons, " They agreed to be registered and that BSTM may contact them."), err,
+        h("button", { class: "btn", type: "submit", text: "Register" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        if (!cons.checked) return (err.textContent = "Tick the box once they have agreed.");
+        busy(f.querySelector("button"), A("/admin/agent/register", { name: val(f, "name"), phone: val(f, "phone"), location: val(f, "location"), goal: val(f, "goal") || null, consent: true })).then(function (r) {
+          clear(shown); shown.appendChild(h("div", { class: "card" }, h("h3", { text: "Give them this password (shown once)" }),
+            h("p", { style: "font-size:2rem;letter-spacing:.15em;font-weight:700", text: r.temporary_password }),
+            h("p", { class: "m", text: "They log in with their phone number and this password, then choose their own. Write it down or tell them now." })));
+          f.reset(); say("Registered."); window.scrollTo(0, 0);
+        }).catch(function (e) { err.textContent = e.message; });
+      });
+      var node = h("div", null, h("h1", { text: "Register" }), shown, f, h("h2", { text: "People registered (" + people.length + ")" }));
+      if (!people.length) node.appendChild(empty("Nobody yet."));
+      people.forEach(function (p) {
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: p.name }), h("p", { class: "m", text: [p.phone, p.location, when(p.created_at)].filter(Boolean).join(" · ") }),
+          h("span", { class: "tag " + (p.must_change_password ? "warn" : "ok"), text: p.must_change_password ? "Has not chosen own password yet" : "Active" })));
+      });
       show(node);
     });
   }

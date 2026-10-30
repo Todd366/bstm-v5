@@ -13,7 +13,8 @@ PEOPLE_READ = {"admin", "field", "support"}
 RULES = [
     ("/admin/staff", None, {"owner"}),
     ("/admin/owner", None, {"owner"}),
-    ("/admin/me", None, ALL),
+    ("/admin/me", None, ALL | {"agent"}),
+    ("/admin/agent", None, {"admin", "field", "agent"}),
     ("/admin/attention", None, ALL),
     ("/admin/queue", None, ALL),
     ("/admin/stats", None, ALL),

@@ -68,6 +68,8 @@ const API = (m, u, h, body) => {
   if (p === "/admin/attention") return ok({ all_clear: false, items: [{ level: "warn", area: "money", title: "Payments to confirm", detail: "1 waiting.", tab: "queue" }] });
   if (p === "/admin/staff/s1/role") return ok({ id: "s1", role: "finance" });
   if (p.startsWith("/admin/report")) return ok({ month: "2026-10", people_joined: 5, businesses_joined: 2, jobs_posted: 3, work_submitted: 4, field_cards: 2, work_approved: 1, money_invoiced: 500, money_received: 450, paid_to_youth: 300, places: [{ location: "Maun", people: 3 }], total: { people: 21, businesses: 3, verified_skills: 4, jobs_done: 2 }, text: "BSTM Activation, 2026-10" });
+  if (p === "/admin/agent/people") return ok([{ id: "p9", name: "Lesego K", phone: "+26772345678", location: "Gumare", created_at: "2026-10-30T00:00:00Z", must_change_password: true }]);
+  if (p === "/admin/agent/register") return ok({ id: "p10", temporary_password: "ABCD-2345" });
   if (p === "/admin/stats") return ok({ counts: { youth: 21, businesses: 3, opportunities: 4, trials: 2 } });
   if (p === "/admin/queue") return ok({
     applications: [], trials: [],
@@ -124,7 +126,7 @@ check("payout account sent as PUT", seen.some((s) => s.m === "PUT" && s.p === "/
 await tab("Me");
 await page.waitForSelector("text=Your profile");
 check("profile editor + public link", (await text("Your public link")) && (await text("Let businesses see my profile")));
-await page.locator("form button[type=submit]").click(); await page.waitForTimeout(300);
+await page.locator("form:has([name=bio]) button[type=submit]").click(); await page.waitForTimeout(300);
 check("profile saved as PUT", seen.some((s) => s.m === "PUT" && s.p === "/me/profile" && s.body.public_profile === true));
 await click("Skills"); await page.waitForSelector("text=Web design");
 check("skills sub-nav", await text("Verified"));
@@ -195,6 +197,7 @@ await tab("Team"); await page.waitForSelector("text=Add a team member");
 await page.locator("select[aria-label='Change role']").first().selectOption("finance"); await click("Change role"); await page.waitForTimeout(300);
 check("owner changes a role", seen.some((s) => s.p === "/admin/staff/s1/role" && s.body.role === "finance"));
 check("team lists staff, built-in owner, pending request", (await text("tau@bstm.test")) && (await text("Owner (built in)")) && (await text("Waiting for approval")));
+await tab("Register"); await page.waitForSelector("text=Register a person"); await page.fill("[name=name]", "Neo M"); await page.fill("[name=phone]", "71234567"); await page.fill("[name=location]", "Maun"); await page.locator("#f_cons").check(); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD-2345"); check("agent registers person and sees temp password", (await text("Lesego K")) && seen.some((s) => s.p === "/admin/agent/register" && s.body.consent === true));
 await tab("Reports"); await page.waitForSelector("text=New people"); check("report shows month numbers", (await text("Copy summary")) && (await text("Maun")));
 await tab("System"); await page.waitForSelector("text=System check");
 check("system check lists measured items", await text("Ledger balance"));

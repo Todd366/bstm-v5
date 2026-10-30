@@ -13,6 +13,8 @@ from app.api.service import (
     staff_approve,
     staff_delete,
     get_open_resets,
+    agent_people,
+    agent_register,
     get_report,
     get_scorecard,
     get_staff,
@@ -104,6 +106,7 @@ from app.schemas.models import (
     TrialCancel,
     TrialCreate,
     TrialReview,
+    AgentRegister,
     TrialSubmission,
 )
 
@@ -520,3 +523,16 @@ def owner_remove(payload: OwnerDelete, request: Request):
 @router.put("/admin/owner/{kind}/{record_id}")
 def owner_update(kind: str, record_id: str, payload: OwnerEdit, request: Request):
     return service_call(owner_edit, kind, record_id, payload.dict(), _actor(request))
+
+
+@router.post("/admin/agent/register", status_code=201)
+def agent_register_route(payload: AgentRegister, request: Request):
+    key = getattr(request.state, "staff_id", None) or "admin-key"
+    return service_call(agent_register, key, _actor(request), payload.dict())
+
+
+@router.get("/admin/agent/people")
+def agent_people_route(request: Request):
+    role = getattr(request.state, "staff_role", None)
+    key = getattr(request.state, "staff_id", None) if role == "agent" else None
+    return service_call(agent_people, key)

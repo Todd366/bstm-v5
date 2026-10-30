@@ -254,3 +254,16 @@ class StaffSignup(BaseModel):
 
 class StaffApprove(BaseModel):
     role: str = Field(..., max_length=20)
+
+
+class AgentRegister(BaseModel):
+    name: str = Field(..., max_length=120)
+    phone: str = Field(..., max_length=30)
+    location: str = Field(..., max_length=120)
+    goal: Optional[str] = Field(None, max_length=200)
+    consent: bool = False
+
+
+class PasswordChange(BaseModel):
+    current: str = Field(..., max_length=128)
+    new: str = Field(..., max_length=128)

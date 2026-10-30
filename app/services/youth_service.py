@@ -32,7 +32,7 @@ _PROFILE_COLUMNS = """
     id, name, location, passion, goal, availability, equipment,
     level, capability_score, learning_score, reputation_score,
     reliability_score, completed_trials, completed_opportunities,
-    revenue, email, phone, intake, bio, public_profile, created_at, updated_at
+    revenue, email, phone, must_change_password, intake, bio, public_profile, created_at, updated_at
 """
 
 # List views leave out the questionnaire answers (financial position,
@@ -257,3 +257,32 @@ def list_youth(limit=50, offset=0):
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def change_password(youth_id, current, new):
+    """Own password change. Needs the current password (a stolen token alone
+    cannot lock the person out); clears the agent's temporary-password flag."""
+
+    youth_id = require_uuid(youth_id, "Youth")
+
+    if not isinstance(current, str) or not isinstance(new, str):
+        raise ValueError("Enter your current and new password")
+
+    validate_password(new)
+    check_rate_limit(hash_key("pw:" + youth_id), "change-password", 10, 15)
+
+    with transaction() as db:
+        row = db.execute("SELECT password_hash FROM youth WHERE id = ? FOR UPDATE", (youth_id,)).fetchone()
+
+        if not row or not row["password_hash"] or not verify_password(current, row["password_hash"]):
+            raise ValueError("Your current password is not right")
+
+        if current == new:
+            raise ValueError("Choose a different new password")
+
+        db.execute(
+            "UPDATE youth SET password_hash = ?, must_change_password = false WHERE id = ?",
+            (hash_password(new), youth_id),
+        )
+
+    return {"status": "password_changed"}

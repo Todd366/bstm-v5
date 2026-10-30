@@ -18,7 +18,7 @@ from app.services.auth_service import (
 )
 from app.services.rate_limit_service import check_rate_limit, hash_key
 
-ROLES = ("admin", "finance", "field", "support")
+ROLES = ("admin", "finance", "field", "support", "agent")
 
 
 def create_staff(name, email, password, role, approved=True):

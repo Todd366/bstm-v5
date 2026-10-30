@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.12.0
+- **Field agents.** New staff role `agent`. An agent sees one tab, Register: full name, phone, village/town, optional goal, and a consent tick. The person is created with a one-time temporary password shown to the agent once; the agent never chooses the real password. The agent sees only the people they registered and whether each has chosen their own password. Admin, field and owner see everyone registered this way.
+- Young people can change their own password (Profile). Agent-registered people are asked to choose their own on first login.
+- Migration `20261030010000_field_agents.sql` (tap Update database). Agent role closed to every other staff route (tested).
+
 ## 5.11.0
 - Young people can sign up and log in with a Botswana phone number instead of an email (71 234 567, 071234567 and +267 all work). One field: "Email or phone number". Staff reset codes work by phone number too. No SMS yet, so numbers are not verified; the password protects the account.
 - Migration `20261030000000_youth_phone.sql` (tap Update database).

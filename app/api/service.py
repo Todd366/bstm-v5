@@ -22,6 +22,7 @@ from app.services.assignment_service import (
 )
 from datetime import timedelta
 
+from app.services import youth_service
 from app.services import notification_service, payment_service, owner_service, attention_service, privacy_service, reset_service, scorecard_service, staff_service
 from app.services.audit_service import create_field_audit, list_field_audits
 from app.services.auth_service import create_access_token
@@ -863,3 +864,17 @@ def youth_profile_for_staff(youth_id, role):
         profile = dict(profile)
         profile.pop("intake", None)
     return profile
+
+
+def agent_register(agent_key, agent_name, data):
+    from app.services import agent_service
+    return agent_service.register_person(agent_key, agent_name, data["name"], data["phone"], data["location"], data.get("goal"), data.get("consent"))
+
+
+def agent_people(agent_key=None):
+    from app.services import agent_service
+    return agent_service.my_people(agent_key)
+
+
+def change_my_password(youth_id, data):
+    return youth_service.change_password(youth_id, data["current"], data["new"])
