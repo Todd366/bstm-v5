@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.14.0
+- Reports: CSV download for the month, and a Field agents section (people registered per agent, how many chose their own password).
+- A test now guards the first-load size (budget 150 KB gzipped; currently about 33 KB).
+- No database change.
+
 ## 5.13.0
 - Agents can now support the people they registered: see their applications, see jobs that fit them, apply for them, and save proof of their work. Each action is logged as done by the agent. An agent can act only for people they registered; admins can act for any agent-registered person; self-signed people are never reachable this way (tested).
 - No database change.

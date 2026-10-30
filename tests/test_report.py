@@ -21,3 +21,19 @@ def test_bad_month_is_refused_and_roles_limited(test_database):
             report_service.monthly_report(bad)
     assert is_allowed("finance", "GET", "/admin/report")
     assert not is_allowed("support", "GET", "/admin/report")
+
+
+def test_csv_and_agent_rows_and_payload_budget(test_database):
+    from app.services import agent_service
+    agent_service.register_person("agent-x", "Mpho", "Csv Person", "76123456", "Maun", None, True)
+    r = report_service.monthly_report()
+    assert r["agents"] and r["agents"][0]["registered"] >= 1
+    csv = report_service.report_csv(r)
+    assert csv.startswith("metric,value\n") and '"people_joined"' in csv
+
+
+def test_first_load_stays_small():
+    """Budget for slow 2G: app shell under 150 KB gzipped (roadmap Phase 2)."""
+    import gzip, pathlib
+    total = sum(len(gzip.compress(p.read_bytes())) for p in pathlib.Path("public").iterdir() if p.suffix in (".js", ".css", ".html", ".svg", ".webmanifest"))
+    assert total < 150 * 1024, total

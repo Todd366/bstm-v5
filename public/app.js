@@ -1122,9 +1122,17 @@
         h("h2", { text: "Where new people joined from" }));
       if (!r.places.length) node.appendChild(empty("Nobody joined this month."));
       r.places.forEach(function (p) { node.appendChild(h("p", { class: "m", text: p.location + " · " + p.people })); });
+      if (r.agents && r.agents.length) { node.appendChild(h("h2", { text: "Field agents" })); r.agents.forEach(function (a) { node.appendChild(h("p", { class: "m", text: a.name + " · registered " + a.registered + " · chose own password " + a.chose_own_password })); }); }
       node.appendChild(h("h2", { text: "All time" }));
       node.appendChild(h("p", { class: "m", text: r.total.people + " people · " + r.total.businesses + " businesses · " + r.total.verified_skills + " verified skills · " + r.total.jobs_done + " jobs done" }));
       node.appendChild(h("pre", { text: r.text, style: "white-space:pre-wrap" })); node.appendChild(copy);
+      var dl = h("button", { class: "btn sm sec", type: "button", text: "Download as spreadsheet (CSV)" });
+      dl.addEventListener("click", function () {
+        busy(dl, fetch("/admin/report/csv?month=" + month, { headers: S.staffToken ? { Authorization: "Bearer " + S.staffToken } : { "X-API-Key": S.adminKey } }).then(function (x) { if (!x.ok) throw new Error("Could not download"); return x.blob(); }).then(function (b) {
+          var a = h("a", { href: URL.createObjectURL(b), download: "bstm-report-" + month + ".csv" }); document.body.appendChild(a); a.click(); a.remove();
+        })).catch(fail);
+      });
+      node.appendChild(dl);
       show(node);
     });
   }

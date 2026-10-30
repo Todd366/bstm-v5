@@ -54,6 +54,17 @@ def monthly_report(month=None):
                 (start, end),
             ).fetchall()
         ]
+        r["agents"] = [
+            {"name": row["name"], "registered": row["registered"], "chose_own_password": row["active"]}
+            for row in db.execute(
+                "SELECT coalesce(s.name, 'Admin key') AS name, count(*) AS registered, "
+                "count(*) FILTER (WHERE NOT y.must_change_password) AS active "
+                "FROM youth y LEFT JOIN staff s ON s.id::text = y.registered_by "
+                "WHERE y.deleted_at IS NULL AND y.registered_by IS NOT NULL AND y.created_at >= %s AND y.created_at < %s "
+                "GROUP BY 1 ORDER BY registered DESC, name" % (lo, hi),
+                (start, end),
+            ).fetchall()
+        ]
         # all-time standing, so a quiet month still shows the base
         r["total"] = {
             "people": db.execute("SELECT count(*) AS n FROM youth WHERE deleted_at IS NULL").fetchone()["n"],
@@ -74,3 +85,16 @@ def report_text(r):
         "Money received: P%.2f · Paid to young people: P%.2f" % (r["money_received"], r["paid_to_youth"]),
         "All time: %d people, %d businesses, %d verified skills, %d jobs done" % (t["people"], t["businesses"], t["verified_skills"], t["jobs_done"]),
     ])
+
+
+def report_csv(r):
+    """The same numbers as a spreadsheet-ready CSV (metric,value)."""
+    rows = [("month", r["month"])]
+    for k in ("people_joined", "businesses_joined", "jobs_posted", "work_submitted", "field_cards", "work_approved",
+              "money_invoiced", "money_received", "paid_to_youth"):
+        rows.append((k, r[k]))
+    rows += [("place: " + p["location"], p["people"]) for p in r["places"]]
+    rows += [("agent: " + a["name"] + " registered", a["registered"]) for a in r["agents"]]
+    rows += [("total_" + k, v) for k, v in r["total"].items()]
+    esc = lambda v: '"' + str(v).replace('"', '""') + '"'
+    return "metric,value\n" + "\n".join(esc(a) + "," + esc(b) for a, b in rows) + "\n"

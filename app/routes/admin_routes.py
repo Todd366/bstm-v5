@@ -563,3 +563,11 @@ def agent_person_apply(youth_id: str, opportunity_id: str, request: Request):
 @router.post("/admin/agent/people/{youth_id}/evidence", status_code=201)
 def agent_person_evidence(youth_id: str, payload: MyEvidenceSubmit, request: Request):
     return service_call(agent_person, "evidence", _agent_key(request), _actor(request), youth_id, payload.dict())
+
+
+@router.get("/admin/report/csv")
+def report_csv_route(month: str = ""):
+    from fastapi.responses import Response
+    from app.services.report_service import monthly_report, report_csv
+    csv = service_call(lambda m: report_csv(monthly_report(m)), month or None)
+    return Response(csv, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=bstm-report.csv"})
