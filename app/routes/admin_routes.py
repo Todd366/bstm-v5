@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Header, Query, Request
 
 from app.api.service import (
+    agent_person,
     owner_delete,
     owner_edit,
     owner_records,
@@ -107,6 +108,7 @@ from app.schemas.models import (
     TrialCreate,
     TrialReview,
     AgentRegister,
+    MyEvidenceSubmit,
     TrialSubmission,
 )
 
@@ -536,3 +538,28 @@ def agent_people_route(request: Request):
     role = getattr(request.state, "staff_role", None)
     key = getattr(request.state, "staff_id", None) if role == "agent" else None
     return service_call(agent_people, key)
+
+
+def _agent_key(request):
+    role = getattr(request.state, "staff_role", None)
+    return getattr(request.state, "staff_id", None) if role == "agent" else None
+
+
+@router.get("/admin/agent/people/{youth_id}/jobs")
+def agent_person_jobs(youth_id: str, request: Request):
+    return service_call(agent_person, "jobs", _agent_key(request), _actor(request), youth_id)
+
+
+@router.get("/admin/agent/people/{youth_id}/work")
+def agent_person_work(youth_id: str, request: Request):
+    return service_call(agent_person, "work", _agent_key(request), _actor(request), youth_id)
+
+
+@router.post("/admin/agent/people/{youth_id}/apply/{opportunity_id}", status_code=201)
+def agent_person_apply(youth_id: str, opportunity_id: str, request: Request):
+    return service_call(agent_person, "apply", _agent_key(request), _actor(request), youth_id, opportunity_id)
+
+
+@router.post("/admin/agent/people/{youth_id}/evidence", status_code=201)
+def agent_person_evidence(youth_id: str, payload: MyEvidenceSubmit, request: Request):
+    return service_call(agent_person, "evidence", _agent_key(request), _actor(request), youth_id, payload.dict())

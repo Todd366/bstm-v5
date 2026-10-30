@@ -39,3 +39,50 @@ def my_people(agent_key=None):
     with transaction() as db:
         rows = db.execute(sql + " ORDER BY created_at DESC LIMIT 200", args).fetchall()
     return [dict(r) for r in rows]
+
+
+def _own_person(agent_key, youth_id):
+    """An agent may act only for people they registered; admins pass agent_key=None."""
+    from app.core.validation import require_uuid
+    youth_id = require_uuid(youth_id, "Person")
+    with transaction() as db:
+        row = db.execute("SELECT registered_by, name FROM youth WHERE id = ? AND deleted_at IS NULL", (youth_id,)).fetchone()
+    if not row or not row["registered_by"] or (agent_key and row["registered_by"] != agent_key):
+        raise ValueError("Person not found")
+    return youth_id, row["name"]
+
+
+def _log(event, youth_id, agent_name):
+    with transaction() as db:
+        db.execute(
+            "INSERT INTO activity (event, actor_id, target_id, details) VALUES (?, NULL, ?, ?)",
+            (event, youth_id, '{"agent": "%s"}' % str(agent_name).replace('"', "")),
+        )
+
+
+def person_jobs(agent_key, youth_id):
+    from app.services.matching_service import match_youth_to_opportunities
+    youth_id, _ = _own_person(agent_key, youth_id)
+    return match_youth_to_opportunities(youth_id)
+
+
+def person_work(agent_key, youth_id):
+    from app.services.assignment_service import list_youth_assignments
+    youth_id, _ = _own_person(agent_key, youth_id)
+    return list_youth_assignments(youth_id)
+
+
+def person_apply(agent_key, agent_name, youth_id, opportunity_id):
+    from app.api.service import apply_to_opportunity
+    youth_id, _ = _own_person(agent_key, youth_id)
+    out = apply_to_opportunity(youth_id, opportunity_id)
+    _log("applied_by_agent", youth_id, agent_name)
+    return out
+
+
+def person_evidence(agent_key, agent_name, youth_id, data):
+    from app.api.service import submit_my_evidence
+    youth_id, _ = _own_person(agent_key, youth_id)
+    out = submit_my_evidence(youth_id, data)
+    _log("evidence_added_by_agent", youth_id, agent_name)
+    return out

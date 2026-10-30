@@ -878,3 +878,16 @@ def agent_people(agent_key=None):
 
 def change_my_password(youth_id, data):
     return youth_service.change_password(youth_id, data["current"], data["new"])
+
+
+def agent_person(action, agent_key, agent_name, youth_id, *args):
+    from app.services import agent_service as a
+    if action == "jobs":
+        return a.person_jobs(agent_key, youth_id)
+    if action == "work":
+        return a.person_work(agent_key, youth_id)
+    if action == "apply":
+        return a.person_apply(agent_key, agent_name, youth_id, args[0])
+    if action == "evidence":
+        return a.person_evidence(agent_key, agent_name, youth_id, args[0])
+    raise ValueError("Unknown action")

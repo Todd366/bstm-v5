@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.12.0)
+## Current state (v5.13.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -58,7 +58,7 @@ Known suspects to test first:
 - [ ] Security review: dependency pinning, CSP, secrets rotation, staff password policy.
 
 ## Phase 5: Reach (villages, towns, cities)
-- [x] Agent mode v1 (v5.12.0): register people with consent, temp password, own-password change. [ ] Agent supports the person afterwards (apply for jobs for them, upload proof). [ ] Agent performance in Reports. [ ] Recruitment flow for specialists/agents themselves (apply, owner approves; staff signup exists).
+- [x] Agent mode v1 (v5.12.0): register people with consent, temp password, own-password change. [x] Agent supports the person (apply, proof; v5.13.0). [ ] Agent submits a field card / starts work for them. [ ] Agent performance in Reports. [ ] Recruitment flow for specialists/agents themselves (apply, owner approves; staff signup exists).
 - [ ] Low-data mode: no images, small JSON, resumable submissions.
 - [ ] Setswana review by a native speaker for every screen.
 - [ ] Pilot in one town; record evidence; adjust.

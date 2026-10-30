@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.13.0
+- Agents can now support the people they registered: see their applications, see jobs that fit them, apply for them, and save proof of their work. Each action is logged as done by the agent. An agent can act only for people they registered; admins can act for any agent-registered person; self-signed people are never reachable this way (tested).
+- No database change.
+
 ## 5.12.0
 - **Field agents.** New staff role `agent`. An agent sees one tab, Register: full name, phone, village/town, optional goal, and a consent tick. The person is created with a one-time temporary password shown to the agent once; the agent never chooses the real password. The agent sees only the people they registered and whether each has chosen their own password. Admin, field and owner see everyone registered this way.
 - Young people can change their own password (Profile). Agent-registered people are asked to choose their own on first login.

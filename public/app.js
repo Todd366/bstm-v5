@@ -1128,7 +1128,36 @@
       show(node);
     });
   }
+  function aPerson(p) {
+    var base = "/admin/agent/people/" + encodeURIComponent(p.id);
+    return Promise.all([A(base + "/work"), A(base + "/jobs")]).then(function (r) {
+      var work = r[0] || [], jobs = r[1] || [], err = h("p", { class: "err", role: "alert" });
+      var node = h("div", null, h("button", { class: "btn sm sec", type: "button", text: "← Back", onclick: function () { S.agentPerson = null; route(); } }),
+        h("h1", { text: p.name }), h("p", { class: "m", text: [p.phone, p.location].filter(Boolean).join(" · ") }), h("h2", { text: "Their work" }));
+      if (!work.length) node.appendChild(empty("No applications yet."));
+      work.forEach(function (a) { node.appendChild(h("div", { class: "card" }, h("h3", { text: a.opportunity_title }), h("span", { class: "tag " + (a.status === "Accepted" || a.status === "Completed" ? "ok" : "warn"), text: statusText(a) }))); });
+      node.appendChild(h("h2", { text: "Jobs that fit them" }));
+      if (!jobs.length) node.appendChild(empty("No matching jobs right now."));
+      jobs.forEach(function (o) {
+        var b = h("button", { class: "btn sm", type: "button", text: "Apply for " + p.name.split(" ")[0] });
+        b.addEventListener("click", function () { busy(b, A(base + "/apply/" + encodeURIComponent(o.opportunity_id || o.id), {})).then(function () { say("Applied for them."); b.textContent = "Applied ✓"; b.disabled = true; }).catch(fail); });
+        node.appendChild(h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.business_name, o.business_location, money(o.budget)].filter(Boolean).join(" · ") }),
+          o.required_skills && o.required_skills.length ? h("p", { class: "m", text: "Skills needed: " + o.required_skills.join(", ") }) : null, b));
+      });
+      var kind = h("select", { "aria-label": "Kind of proof" }, KINDS.map(function (k) { return h("option", { value: k, text: KIND_LABEL[k] || k }); }));
+      var f = h("form", { class: "card", novalidate: true }, h("h3", { text: "Add proof of their work" }), kind,
+        field("What is it?", "notes", "text", { max: 500 }), field("Link (optional)", "url", "url", { max: 500, im: "url" }), err, h("button", { class: "btn", type: "submit", text: "Save proof" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault(); err.textContent = "";
+        if (!val(f, "notes")) return (err.textContent = "Say what the proof is.");
+        busy(f.querySelector("button"), A(base + "/evidence", { kind: kind.value, notes: val(f, "notes"), url: val(f, "url") || null })).then(function () { say("Proof saved."); f.reset(); }).catch(function (e) { err.textContent = e.message; });
+      });
+      node.appendChild(f);
+      show(node);
+    });
+  }
   function aAgent() {
+    if (S.agentPerson) return aPerson(S.agentPerson);
     return A("/admin/agent/people").then(function (people) {
       var err = h("p", { class: "err", role: "alert" }), shown = h("div");
       var cons = h("input", { type: "checkbox", id: "f_cons", style: "width:auto;min-height:0" });
@@ -1153,7 +1182,8 @@
       if (!people.length) node.appendChild(empty("Nobody yet."));
       people.forEach(function (p) {
         node.appendChild(h("div", { class: "card" }, h("h3", { text: p.name }), h("p", { class: "m", text: [p.phone, p.location, when(p.created_at)].filter(Boolean).join(" · ") }),
-          h("span", { class: "tag " + (p.must_change_password ? "warn" : "ok"), text: p.must_change_password ? "Has not chosen own password yet" : "Active" })));
+          h("span", { class: "tag " + (p.must_change_password ? "warn" : "ok"), text: p.must_change_password ? "Has not chosen own password yet" : "Active" }),
+          h("button", { class: "btn sm", type: "button", text: "Help with jobs and proof", onclick: function () { S.agentPerson = p; route(); } })));
       });
       show(node);
     });

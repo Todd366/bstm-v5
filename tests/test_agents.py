@@ -36,3 +36,28 @@ def test_agent_role_is_limited_to_agent_routes(test_database):
     assert not is_allowed("finance", "POST", "/admin/agent/register")
     sid = staff_service.create_staff("Agent A", "agent@bstm.test", "a-long-password-12", "agent")
     assert sid
+
+
+def test_agent_helps_only_people_they_registered(test_database):
+    from app.services import business_service, opportunity_service
+    from tests.helpers import create_youth
+    mine = agent_service.register_person(AGENT, "Mpho", "Neo M", "74561234", "Maun", None, True)["id"]
+    other = agent_service.register_person("agent-key-2", "Kabo", "Ona P", "75671234", "Maun", None, True)["id"]
+    self_signed = create_youth(name="Self Signed")
+    bid = business_service.create_business("Agent Shop", "Owner", "Retail", "Maun", "x", email="agentshop@example.com", password="correct-horse-battery")
+    oid = opportunity_service.create_opportunity(bid, "Paint sign", "Needs paint", None, 100)
+
+    agent_service.person_apply(AGENT, "Mpho", mine, oid)
+    work = agent_service.person_work(AGENT, mine)
+    assert [w["opportunity_title"] for w in work] == ["Paint sign"]
+    agent_service.person_evidence(AGENT, "Mpho", mine, {"kind": "Other", "notes": "Photo of earlier sign"})
+
+    for victim in (other, self_signed):
+        with pytest.raises(ValueError):
+            agent_service.person_apply(AGENT, "Mpho", victim, oid)
+        with pytest.raises(ValueError):
+            agent_service.person_work(AGENT, victim)
+    # admins (agent_key None) may help any agent-registered person, but not a self-signed one
+    assert agent_service.person_work(None, other) == []
+    with pytest.raises(ValueError):
+        agent_service.person_work(None, self_signed)
