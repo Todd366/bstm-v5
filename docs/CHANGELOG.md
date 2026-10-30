@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.14.1
+- Tests only: two staff pressing Confirm on the same payment, or Mark paid on the same payout, at the same instant on real Postgres. Exactly one succeeds, one payout is created, money is counted once. No behaviour change.
+
 ## 5.14.0
 - Reports: CSV download for the month, and a Field agents section (people registered per agent, how many chose their own password).
 - A test now guards the first-load size (budget 150 KB gzipped; currently about 33 KB).
