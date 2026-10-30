@@ -43,6 +43,34 @@ def clean_email(value):
     return value
 
 
+def clean_phone(value):
+    """Botswana numbers only, stored as +267XXXXXXXX (8 digits starting 3-7).
+    Accepts 71234567, 071234567, 26771234567, +267 71 234 567."""
+
+    digits = re.sub(r"[^0-9]", "", str(value or ""))
+
+    if digits.startswith("267") and len(digits) == 11:
+        digits = digits[3:]
+    elif digits.startswith("0") and len(digits) == 9:
+        digits = digits[1:]
+
+    if not re.fullmatch(r"[3-7][0-9]{7}", digits):
+        raise ValueError("Enter a Botswana phone number like 71 234 567")
+
+    return "+267" + digits
+
+
+def split_login_id(value):
+    """('email', cleaned) when it has an @, otherwise ('phone', +267...)."""
+
+    value = str(value or "").strip()
+
+    if "@" in value:
+        return "email", clean_email(value)
+
+    return "phone", clean_phone(value)
+
+
 def require_uuid(value, label):
     """Returns the canonical string form of a UUID or raises ValueError
     whose message contains 'not found' so the API maps it to 404 (an id

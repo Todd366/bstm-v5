@@ -146,7 +146,7 @@
     var err = h("p", { class: "err", role: "alert" });
     var form = h("form", { class: "card", novalidate: true },
       h("h1", { text: t("Log in") }),
-      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }),
+      field("Email or phone number", "email", "text", { ac: "username", max: 254 }),
       field("Password", "password", "password", { ac: "current-password", max: 128 }),
       err,
       h("button", { class: "btn", type: "submit", text: t("Log in") }));
@@ -208,14 +208,15 @@
       if (step === 0) {
         body = h("form", { novalidate: true }, h("h1", { text: "Create your account" }),
           field("Name", "name", "text", { ac: "name", max: 120, value: d.name }),
-          field("Email", "email", "email", { ac: "email", max: 254, im: "email", value: d.email }),
+          field("Email or phone number", "email", "text", { ac: "username", max: 254, value: d.email }),
+          h("p", { class: "m", text: "No email? Use your phone number, like 71 234 567." }),
           field("Password", "password", "password", { ac: "new-password", max: 128 }),
           h("p", { class: "m", text: "At least 8 characters." }), err, nav());
         body.addEventListener("submit", function (ev) {
           ev.preventDefault();
           d.name = val(body, "name"); d.email = val(body, "email"); d.password = body.querySelector("[name=password]").value;
           if (!d.name) return problem("Please enter your name.");
-          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) return problem("Enter a valid email address.");
+          if (d.email.indexOf("@") >= 0 ? !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email) : !/^(\+?267|0)?\s?[3-7](\s?\d){7}$/.test(d.email)) return problem("Enter a valid email or a Botswana phone number.");
           if (d.password.length < 8) return problem("Password must be at least 8 characters.");
           step = 1; render();
         });
@@ -270,7 +271,7 @@
             err.textContent = "";
             var caps = Object.keys(d.skills).map(function (id) { return { capability_id: id, level: d.skillLevel || "Beginner" }; });
             var payload = {
-              name: d.name, email: d.email, password: d.password, location: d.location, goal: d.aspiration,
+              name: d.name, email: d.email.indexOf("@") >= 0 ? d.email : null, phone: d.email.indexOf("@") >= 0 ? null : d.email, password: d.password, location: d.location, goal: d.aspiration,
               passion: d.interests.join(", "), availability: d.availability, equipment: d.resources.join(", "), capabilities: caps,
               intake: { age: Number(d.age), position: d.position, education: d.education, interests: d.interests, skillLevel: d.skillLevel, resources: d.resources, income: d.income, capital: d.capital, availability: d.availability, challenges: d.challenges, aspiration: d.aspiration }
             };
@@ -794,7 +795,7 @@
     var err = h("p", { class: "err", role: "alert" });
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: "Forgot password" }),
       h("p", { class: "m", text: "Ask BSTM for a reset code (call or message us). We will check it is you and give you a code. Then enter it here." }),
-      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Code from BSTM", "code", "text", { max: 20, ac: "off" }),
+      field(type === "youth" ? "Email or phone number" : "Email", "email", "text", { ac: "username", max: 254 }), field("Code from BSTM", "code", "text", { max: 20, ac: "off" }),
       field("New password (12+ characters)", "password", "password", { ac: "new-password", max: 128 }), err,
       h("button", { class: "btn", type: "submit", text: "Set new password" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: type === "youth" ? loginScreen : bizLoginScreen }));
     f.addEventListener("submit", function (ev) {
@@ -1023,7 +1024,7 @@
     var type = h("select", { "aria-label": "Account type" }, h("option", { value: "youth", text: "Youth" }), h("option", { value: "business", text: "Business" }));
     var f = h("form", { class: "card", novalidate: true }, h("h2", { text: "Password reset code" }),
       h("p", { class: "m", text: "First confirm the person is who they say (phone call or in person). Then create a code and tell it to them." }),
-      type, field("Their email", "email", "email", { max: 254, im: "email" }), err, h("button", { class: "btn", type: "submit", text: "Create code" }));
+      type, field("Their email or phone number", "email", "text", { max: 254 }), err, h("button", { class: "btn", type: "submit", text: "Create code" }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";
       busy(f.querySelector("button"), A("/admin/resets", { account_type: type.value, email: val(f, "email") })).then(function (r) {

@@ -47,7 +47,7 @@ def list_records(kind):
         if kind == "youth":
             rows = db.execute(
                 """
-                SELECT y.id, y.name, y.email, y.location, y.created_at,
+                SELECT y.id, y.name, COALESCE(y.email, y.phone) AS email, y.location, y.created_at,
                        (y.password_hash IS NOT NULL) AS can_login,
                        (SELECT count(*) FROM opportunity_assignments a WHERE a.youth_id = y.id) AS jobs,
                        (SELECT count(*) FROM invoices i WHERE i.youth_id = y.id) AS money_records

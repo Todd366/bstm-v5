@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.11.0
+- Young people can sign up and log in with a Botswana phone number instead of an email (71 234 567, 071234567 and +267 all work). One field: "Email or phone number". Staff reset codes work by phone number too. No SMS yet, so numbers are not verified; the password protects the account.
+- Migration `20261030000000_youth_phone.sql` (tap Update database).
+
 ## 5.10.0
 - Staff **Reports** tab (admin, finance): pick a month and see new people, new businesses, jobs posted, work submitted/approved, field cards, money received, paid to young people, where people joined from, and all-time totals. Copy-ready summary text. All counted from live records on Africa/Gaborone months.
 - No database change.

@@ -108,7 +108,7 @@ const click = (name, opt) => page.getByRole("button", { name, exact: !(opt && op
 await page.goto(base + "/");
 check("landing shows business login", await text("Log in as business"));
 await click("Log in", { exact: true });
-await page.fill("[name=email]", "t@example.com"); await page.fill("[name=password]", "correct-horse-battery");
+await page.fill("[name=email]", "71234567"); await page.fill("[name=password]", "correct-horse-battery");
 await page.locator("form button[type=submit]").click();
 await page.waitForSelector("text=Hello, Thobo");
 check("youth home", await text("Hello, Thobo"));

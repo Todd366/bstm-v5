@@ -7,7 +7,7 @@ import hmac
 import secrets
 
 from app.core.errors import Forbidden
-from app.core.validation import clean_email, require_uuid
+from app.core.validation import clean_email, require_uuid, split_login_id
 from app.db.database import transaction
 from app.services.auth_service import hash_password, validate_password
 from app.services.rate_limit_service import check_rate_limit, hash_key
@@ -23,16 +23,19 @@ def _hash(code):
     return hashlib.sha256(code.strip().upper().encode("utf-8")).hexdigest()
 
 
+def _find(db, account_type, ident):
+    """Youth can be found by email or phone; businesses by email."""
+    kind, v = split_login_id(ident) if account_type == "youth" else ("email", clean_email(ident))
+    where = "lower(email) = lower(?)" if kind == "email" else "phone = ?"
+    return db.execute("SELECT id FROM " + TABLES[account_type] + " WHERE " + where, (v,)).fetchone()
+
+
 def create_reset_code(account_type, email, created_by="staff"):
     if account_type not in TABLES:
         raise ValueError("Choose youth or business")
 
-    email = clean_email(email)
-
     with transaction() as db:
-        account = db.execute(
-            "SELECT id FROM " + TABLES[account_type] + " WHERE lower(email) = lower(?)", (email,)
-        ).fetchone()
+        account = _find(db, account_type, email)
 
         if not account:
             raise ValueError("Account not found")
@@ -75,9 +78,10 @@ def redeem_reset_code(account_type, email, code, new_password):
     wrong = False
 
     with transaction() as db:
-        account = db.execute(
-            "SELECT id FROM " + TABLES[account_type] + " WHERE lower(email) = lower(?)", (email.strip(),)
-        ).fetchone()
+        try:
+            account = _find(db, account_type, email.strip())
+        except ValueError:
+            account = None
 
         reset = None
 
@@ -114,7 +118,7 @@ def list_open_resets():
         rows = db.execute(
             """
             SELECT r.id, r.account_type, r.created_at, r.expires_at, r.created_by,
-                   COALESCE(y.email, b.email) AS email
+                   COALESCE(y.email, y.phone, b.email) AS email
             FROM password_resets r
             LEFT JOIN youth y ON r.account_type = 'youth' AND y.id = r.account_id
             LEFT JOIN businesses b ON r.account_type = 'business' AND b.id = r.account_id

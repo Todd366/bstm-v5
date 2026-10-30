@@ -8,6 +8,8 @@ from app.core.errors import Conflict
 from app.core.validation import (
     check_json_size,
     clean_email,
+    clean_phone,
+    split_login_id,
     clean_text,
     require_uuid,
 )
@@ -30,7 +32,7 @@ _PROFILE_COLUMNS = """
     id, name, location, passion, goal, availability, equipment,
     level, capability_score, learning_score, reputation_score,
     reliability_score, completed_trials, completed_opportunities,
-    revenue, email, intake, bio, public_profile, created_at, updated_at
+    revenue, email, phone, intake, bio, public_profile, created_at, updated_at
 """
 
 # List views leave out the questionnaire answers (financial position,
@@ -42,13 +44,14 @@ def create_youth(
     name,
     location,
     goal,
-    email,
-    password,
+    email=None,
+    password=None,
     passion=None,
     availability=None,
     equipment=None,
     intake=None,
     capabilities=None,
+    phone=None,
 ):
     """Creates a youth profile. Returns the new youth's UUID (str).
 
@@ -69,7 +72,10 @@ def create_youth(
     passion = clean_text(passion, "Passion", 300, required=False)
     availability = clean_text(availability, "Availability", 100, required=False)
     equipment = clean_text(equipment, "Equipment", 300, required=False)
-    email = clean_email(email)
+    email = clean_email(email) if email else None
+    phone = clean_phone(phone) if phone else None
+    if not email and not phone:
+        raise ValueError("Enter an email address or a phone number")
     validate_password(password)
     check_json_size(intake, "Intake")
 
@@ -78,21 +84,19 @@ def create_youth(
     try:
         with transaction() as db:
 
-            existing_email = db.execute(
-                "SELECT id FROM youth WHERE lower(email) = lower(?)",
-                (email,),
-            ).fetchone()
-
-            if existing_email:
+            if email and db.execute("SELECT id FROM youth WHERE lower(email) = lower(?)", (email,)).fetchone():
                 raise Conflict("An account with this email already exists")
+
+            if phone and db.execute("SELECT id FROM youth WHERE phone = ?", (phone,)).fetchone():
+                raise Conflict("An account with this phone number already exists")
 
             row = db.execute(
                 """
                 INSERT INTO youth (
                     name, location, passion, goal, availability, equipment,
-                    intake, email, password_hash
+                    intake, email, phone, password_hash
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 (
@@ -104,6 +108,7 @@ def create_youth(
                     equipment,
                     psycopg2.extras.Json(intake) if intake else None,
                     email,
+                    phone,
                     hash_password(password),
                 ),
             ).fetchone()
@@ -136,7 +141,7 @@ def create_youth(
             )
 
     except psycopg2.errors.UniqueViolation:
-        raise Conflict("An account with this email already exists")
+        raise Conflict("An account with this email or phone number already exists")
 
     return str(youth_id)
 
@@ -179,17 +184,24 @@ def authenticate_youth(email, password):
     if not email or not password or len(password) > 128 or len(email) > 254:
         raise ValueError("Invalid email or password")
 
+    try:
+        kind, ident = split_login_id(email)
+    except ValueError:
+        burn_verification_time(password)
+        raise ValueError("Invalid email or password")
+
     # Per-account throttle: stops password guessing against one account
     # even when attempts come from many addresses.
     check_rate_limit(
-        hash_key(email), "login-account", RATE_LOGIN_PER_15MIN_ACCOUNT, 15
+        hash_key(ident), "login-account", RATE_LOGIN_PER_15MIN_ACCOUNT, 15
     )
 
     with transaction() as db:
 
         row = db.execute(
-            "SELECT id, password_hash FROM youth WHERE lower(email) = lower(?)",
-            (email,),
+            "SELECT id, password_hash FROM youth WHERE "
+            + ("lower(email) = lower(?)" if kind == "email" else "phone = ?"),
+            (ident,),
         ).fetchone()
 
         if not row or not row["password_hash"]:
