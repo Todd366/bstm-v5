@@ -894,4 +894,10 @@ def agent_person(action, agent_key, agent_name, youth_id, *args):
         return a.person_apply(agent_key, agent_name, youth_id, args[0])
     if action == "evidence":
         return a.person_evidence(agent_key, agent_name, youth_id, args[0])
+    if action == "trials":
+        return a.person_trials(agent_key, youth_id)
+    if action == "start":
+        return a.person_start_work(agent_key, agent_name, youth_id, args[0])
+    if action == "submit":
+        return a.person_submit_trial(agent_key, agent_name, youth_id, args[0], args[1])
     raise ValueError("Unknown action")

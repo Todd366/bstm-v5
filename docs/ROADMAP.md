@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.15.0)
+## Current state (v5.16.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -44,7 +44,7 @@ Known suspects to test first:
 - [ ] Payment provider: owner's constraints are Absa savings card, DPO rejected. Candidate path: manual Orange Money / MyZaka confirm (live now) -> SMS-bridge adapter (built, needs a phone running the bridge) -> a gateway adapter once a provider accepts the business. Decision needed from owner; see project doc `payments-botswana-2026-10`.
 - [ ] Notifications beyond in-app: SMS or WhatsApp (provider decision), keep in-app as source of truth.
 - [x] Phone-number login without OTP (v5.11.0). [ ] OTP verification (needs SMS provider). [ ] Phone login for businesses.
-- [x] Structured job requirements (v5.9.0). [ ] Staff-side picker when staff post a job; [x] requirements shown to staff (v5.15.0).
+- [x] Structured job requirements (v5.9.0). [x] Staff-side skill picker and custom job post (v5.16.0); [x] requirements shown to staff (v5.15.0).
 - [ ] Field audit -> suggested jobs -> business confirmation loop (reuse existing audit and diagnosis services).
 - [x] Reports: monthly numbers (v5.10.0). [x] CSV export and per-agent numbers (v5.14.0). [x] per-town breakdown (v5.15.0).
 - [ ] Public verification: shareable proof page for a youth's verified work (opt-in, exists as public profile; extend with evidence).
@@ -58,7 +58,7 @@ Known suspects to test first:
 - [ ] Security review: dependency pinning, CSP, secrets rotation, staff password policy.
 
 ## Phase 5: Reach (villages, towns, cities)
-- [x] Agent mode v1 (v5.12.0): register people with consent, temp password, own-password change. [x] Agent supports the person (apply, proof; v5.13.0). [ ] Agent submits a field card / starts work for them. [ ] Agent performance in Reports. [ ] Recruitment flow for specialists/agents themselves (apply, owner approves; staff signup exists).
+- [x] Agent mode v1 (v5.12.0): register people with consent, temp password, own-password change. [x] Agent supports the person (apply, proof; v5.13.0). [x] Agent starts work and submits the field card for them (v5.16.0). [ ] Agent performance in Reports. [ ] Recruitment flow for specialists/agents themselves (apply, owner approves; staff signup exists).
 - [ ] Low-data mode: no images, small JSON, resumable submissions.
 - [ ] Setswana review by a native speaker for every screen.
 - [ ] Pilot in one town; record evidence; adjust.

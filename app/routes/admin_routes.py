@@ -578,3 +578,18 @@ def report_csv_route(month: str = ""):
     from app.services.report_service import monthly_report, report_csv
     csv = service_call(lambda m: report_csv(monthly_report(m)), month or None)
     return Response(csv, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=bstm-report.csv"})
+
+
+@router.get("/admin/agent/people/{youth_id}/trials")
+def agent_person_trials(youth_id: str, request: Request):
+    return service_call(agent_person, "trials", _agent_key(request), _actor(request), youth_id)
+
+
+@router.post("/admin/agent/people/{youth_id}/work/{assignment_id}/start", status_code=201)
+def agent_person_start(youth_id: str, assignment_id: str, request: Request):
+    return service_call(agent_person, "start", _agent_key(request), _actor(request), youth_id, assignment_id)
+
+
+@router.post("/admin/agent/people/{youth_id}/trials/{trial_id}/submit")
+def agent_person_submit(youth_id: str, trial_id: str, payload: TrialSubmission, request: Request):
+    return service_call(agent_person, "submit", _agent_key(request), _actor(request), youth_id, trial_id, payload.submission)

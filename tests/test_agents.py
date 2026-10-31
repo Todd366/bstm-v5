@@ -61,3 +61,25 @@ def test_agent_helps_only_people_they_registered(test_database):
     assert agent_service.person_work(None, other) == []
     with pytest.raises(ValueError):
         agent_service.person_work(None, self_signed)
+
+
+def test_agent_starts_work_and_submits_field_card_for_person(test_database):
+    from app.services import assignment_service, business_service, opportunity_service
+    from tests.test_field_card import GOOD
+    pid = agent_service.register_person(AGENT, "Mpho", "Field Person", "75123456", "Maun", None, True)["id"]
+    other = agent_service.register_person("agent-key-3", "Kabo", "Other Person", "76123457", "Maun", None, True)["id"]
+    bid = business_service.create_business("Card Shop", "O", "Retail", "Maun", "x", email="cardshop@example.com", password="correct-horse-battery")
+    oid = opportunity_service.create_opportunity(bid, "Survey shops", "d", None, 0)
+    agent_service.person_apply(AGENT, "Mpho", pid, oid)
+    aid = agent_service.person_work(AGENT, pid)[0]["assignment_id"]
+    with pytest.raises(ValueError):                       # not accepted yet
+        agent_service.person_start_work(AGENT, "Mpho", pid, aid)
+    assignment_service.accept_assignment(aid)
+    with pytest.raises(ValueError):                       # another agent's person
+        agent_service.person_start_work("agent-key-3", "Kabo", pid, aid)
+    agent_service.person_start_work(AGENT, "Mpho", pid, aid)
+    trial = agent_service.person_work(AGENT, pid)[0]["trial_id"]
+    agent_service.person_submit_trial(AGENT, "Mpho", pid, trial, dict(GOOD))
+    sub = agent_service.person_trials(AGENT, pid)[0]
+    assert sub["status"] == "Submitted" and sub["submission"]["type"] == "field_card" and sub["submission"]["summary"] == "Bookings are on paper"
+    assert agent_service.person_trials(None, other) == []

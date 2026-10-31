@@ -488,7 +488,7 @@
   };
   var FC_QUESTIONS = ["How do customers usually find you?", "What time / situation is your busiest?", "What is the hardest part of running this?", "What usually causes delays or mistakes?"];
   function fcCards(trials) { return (trials || []).filter(function (x) { return x.submission && x.submission.type === "field_card"; }).map(function (x) { return x.submission; }); }
-  function submitForm(trialId, trials) {
+  function submitForm(trialId, trials, doSubmit) {
     var draftKey = "bstm-card-" + trialId, st = {}, asked = [false, false, false, false];
     try { var d0 = JSON.parse(localStorage.getItem(draftKey) || "{}"); st = d0.st || {}; asked = d0.asked || asked; } catch (e) { }
     var f = h("form", { novalidate: true, class: "fcard" });
@@ -550,7 +550,7 @@
       var need = [["business", "business name"], ["btype", "business type"], ["location", "location"], ["entry_type", "entry type"], ["reaction", "reaction"], ["core_problem", "core problem"], ["insight", "insight"], ["interest", "interest"], ["return", "return"]];
       for (var i = 0; i < need.length; i++) if (!card[need[i][0]]) return say("Please fill in: " + need[i][1] + ".", true);
       if (!q.length) return say("Write at least one exact quote, in their words.", true);
-      busy(f.querySelector("button[type=submit]"), api("/me/trials/" + encodeURIComponent(trialId) + "/submit", { body: { submission: card } }))
+      busy(f.querySelector("button[type=submit]"), doSubmit ? doSubmit(card) : api("/me/trials/" + encodeURIComponent(trialId) + "/submit", { body: { submission: card } }))
         .then(function () { try { localStorage.removeItem(draftKey); } catch (e) { } say("Trial #" + n + " submitted. BSTM will review it."); route(); }).catch(fail);
     });
     return f;
@@ -893,23 +893,26 @@
       });
     });
   }
+  function skillPicker(caps, note) {
+    var chosen = {}, node = h("div", null, h("label", { text: "Skills needed (pick up to 5, optional)" }), note ? h("p", { class: "m", text: note }) : null);
+    var chips = h("div", { class: "chips" }), countNote = h("p", { class: "m", text: "" });
+    (caps || []).forEach(function (c) {
+      var b = h("button", { type: "button", class: "chip", "aria-pressed": "false", text: c.name });
+      b.addEventListener("click", function () {
+        if (chosen[c.id]) { delete chosen[c.id]; b.setAttribute("aria-pressed", "false"); }
+        else if (Object.keys(chosen).length >= 5) { say("Choose at most 5 skills.", true); return; }
+        else { chosen[c.id] = 1; b.setAttribute("aria-pressed", "true"); }
+        countNote.textContent = Object.keys(chosen).length ? Object.keys(chosen).length + " chosen" : "";
+      });
+      chips.appendChild(b);
+    });
+    node.appendChild(chips); node.appendChild(countNote);
+    return { node: node, chosen: chosen };
+  }
   function bPost() {
     return Promise.all([loadDepts(), api("/catalog/capabilities", { anon: true }).catch(function () { return []; })]).then(function (rr) {
-      var depts = rr[0], caps = rr[1] || [], chosen = {};
-      var skillBox = h("div", null, h("label", { text: "Skills needed (pick up to 5, optional)" }), h("p", { class: "m", text: "This helps BSTM send your job to the right young people." }));
-      var chips = h("div", { class: "chips" });
-      var countNote = h("p", { class: "m", text: "" });
-      caps.forEach(function (c) {
-        var b = h("button", { type: "button", class: "chip", "aria-pressed": "false", text: c.name });
-        b.addEventListener("click", function () {
-          if (chosen[c.id]) { delete chosen[c.id]; b.setAttribute("aria-pressed", "false"); }
-          else if (Object.keys(chosen).length >= 5) { say("Choose at most 5 skills.", true); return; }
-          else { chosen[c.id] = 1; b.setAttribute("aria-pressed", "true"); }
-          countNote.textContent = Object.keys(chosen).length ? Object.keys(chosen).length + " chosen" : "";
-        });
-        chips.appendChild(b);
-      });
-      skillBox.appendChild(chips); skillBox.appendChild(countNote);
+      var depts = rr[0], caps = rr[1] || [];
+      var sp = skillPicker(caps, "This helps BSTM send your job to the right young people."), skillBox = sp.node, chosen = sp.chosen;
       var err = h("p", { class: "err", role: "alert" });
       var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Post a job") }),
         field("What do you need done?", "title", "text", { max: 200, ph: "e.g. Make a poster for my shop" }),
@@ -1139,12 +1142,21 @@
   }
   function aPerson(p) {
     var base = "/admin/agent/people/" + encodeURIComponent(p.id);
-    return Promise.all([A(base + "/work"), A(base + "/jobs")]).then(function (r) {
-      var work = r[0] || [], jobs = r[1] || [], err = h("p", { class: "err", role: "alert" });
+    return Promise.all([A(base + "/work"), A(base + "/jobs"), A(base + "/trials")]).then(function (r) {
+      var work = r[0] || [], jobs = r[1] || [], trials = r[2] || [], err = h("p", { class: "err", role: "alert" });
       var node = h("div", null, h("button", { class: "btn sm sec", type: "button", text: "← Back", onclick: function () { S.agentPerson = null; route(); } }),
         h("h1", { text: p.name }), h("p", { class: "m", text: [p.phone, p.location].filter(Boolean).join(" · ") }), h("h2", { text: "Their work" }));
       if (!work.length) node.appendChild(empty("No applications yet."));
-      work.forEach(function (a) { node.appendChild(h("div", { class: "card" }, h("h3", { text: a.opportunity_title }), h("span", { class: "tag " + (a.status === "Accepted" || a.status === "Completed" ? "ok" : "warn"), text: statusText(a) }))); });
+      work.forEach(function (a) {
+        var card = h("div", { class: "card" }, h("h3", { text: a.opportunity_title }), h("span", { class: "tag " + (a.status === "Accepted" || a.status === "Completed" ? "ok" : "warn"), text: statusText(a) }));
+        if (a.status === "Accepted" && !a.trial_id) {
+          var sb = h("button", { class: "btn sm", type: "button", text: "Start the work for them" });
+          sb.addEventListener("click", function () { busy(sb, A(base + "/work/" + encodeURIComponent(a.assignment_id) + "/start", {})).then(function () { say("Work started."); route(); }).catch(fail); });
+          card.appendChild(sb);
+        }
+        if (a.trial_id && a.trial_status === "Active") card.appendChild(submitForm(a.trial_id, trials, function (c) { return A(base + "/trials/" + encodeURIComponent(a.trial_id) + "/submit", { submission: c }); }));
+        node.appendChild(card);
+      });
       node.appendChild(h("h2", { text: "Jobs that fit them" }));
       if (!jobs.length) node.appendChild(empty("No matching jobs right now."));
       jobs.forEach(function (o) {
@@ -1426,7 +1438,8 @@
   }
 
   function aBiz() {
-    return A("/businesses?limit=200").then(function (list) {
+    return Promise.all([A("/businesses?limit=200"), api("/catalog/capabilities", { anon: true }).catch(function () { return []; }), loadDepts()]).then(function (rr) {
+      var list = rr[0], caps = rr[1] || [], depts = rr[2] || [];
       var node = h("div", null, h("h1", { text: "Businesses" }), h("button", { class: "btn sec", type: "button", text: "Register a business", onclick: businessScreen }));
       if (!list.length) node.appendChild(empty("No businesses yet."));
       list.forEach(function (b) {
@@ -1438,17 +1451,35 @@
           busy(btn, A("/businesses/" + b.id + "/diagnosis")).then(function (fs) {
             clear(out);
             fs.forEach(function (f) {
-              var budget = h("input", { type: "number", min: 0, placeholder: "Budget (P)", inputmode: "numeric" });
+              var budget = h("input", { type: "number", min: 0, placeholder: "Budget (P)", inputmode: "numeric", "aria-label": "Budget in Pula" });
+              var sk = skillPicker(caps);
               var post = h("button", { class: "btn sm", type: "button", text: "Post job" });
               post.addEventListener("click", function () {
-                busy(post, A("/opportunities", { business_id: b.id, title: f.opportunity.title, description: f.opportunity.description, department: f.opportunity.department, budget: Number(budget.value) || 0 }))
+                busy(post, A("/opportunities", { business_id: b.id, title: f.opportunity.title, description: f.opportunity.description, department: f.opportunity.department, budget: Number(budget.value) || 0, skills: Object.keys(sk.chosen) }))
                   .then(function () { say("Job posted."); post.textContent = "Posted ✓"; post.disabled = true; }).catch(fail);
               });
-              out.appendChild(h("div", { class: "card" }, h("h3", { text: f.opportunity.title }), h("p", { class: "m", text: f.department }), h("p", { text: f.opportunity.description }), budget, post));
+              out.appendChild(h("div", { class: "card" }, h("h3", { text: f.opportunity.title }), h("p", { class: "m", text: f.department }), h("p", { text: f.opportunity.description }), sk.node, budget, post));
             });
           }).catch(fail);
         });
         card.appendChild(btn);
+        var own = h("button", { class: "btn sm sec", type: "button", text: "Post a job for them" });
+        own.addEventListener("click", function () {
+          own.hidden = true;
+          var sk2 = skillPicker(caps), e2 = h("p", { class: "err", role: "alert" });
+          var f2 = h("form", { class: "card", novalidate: true }, h("h3", { text: "New job for " + b.name }), field("What needs doing?", "title", "text", { max: 200 }),
+            h("div", null, h("label", { for: "f_d" + b.id, text: "Details" }), h("textarea", { id: "f_d" + b.id, name: "description", maxlength: 4000 })),
+            h("div", null, h("label", { for: "f_t" + b.id, text: "Type of help" }), h("select", { id: "f_t" + b.id, name: "department" }, h("option", { value: "", text: "Not sure" }), depts.map(function (d) { return h("option", { value: d, text: d }); }))),
+            sk2.node, field("Budget (Pula)", "budget", "number", { im: "numeric", ph: "0 if free" }), e2, h("button", { class: "btn", type: "submit", text: "Post job" }));
+          f2.addEventListener("submit", function (ev) {
+            ev.preventDefault(); e2.textContent = "";
+            if (!val(f2, "title")) return (e2.textContent = "Say what needs doing.");
+            busy(f2.querySelector("button[type=submit]"), A("/opportunities", { business_id: b.id, title: val(f2, "title"), description: val(f2, "description") || null, department: val(f2, "department") || null, budget: Number(val(f2, "budget")) || 0, skills: Object.keys(sk2.chosen) }))
+              .then(function () { say("Job posted."); route(); }).catch(function (x) { e2.textContent = x.message; });
+          });
+          out.appendChild(f2);
+        });
+        card.appendChild(own);
         var st = h("select", { "aria-label": "Audit status" }, ["Pending", "InProgress", "Completed"].map(function (x) { return h("option", { value: x, text: "Audit: " + x, selected: x === b.audit_status }); }));
         st.addEventListener("change", function () { A("/businesses/" + b.id + "/audit-status", { status: st.value }).then(function () { say("Audit status updated."); }).catch(fail); });
         card.appendChild(h("div", { style: "margin-top:8px" }, st));

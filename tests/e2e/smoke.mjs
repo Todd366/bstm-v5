@@ -28,6 +28,8 @@ let migrated = false;
 const API = (m, u, h, body) => {
   const p = u.pathname;
   seen.push({ m, p, q: u.search, key: h["idempotency-key"], auth: h["authorization"], body });
+  if (p === "/businesses" && m === "GET") return ok([{ id: "b1", name: "Spaza One", owner: "Ana", sector: "Retail", location: "Maun", main_problem: "Slow", audit_status: "Pending", opportunities_generated: 0 }]);
+  if (p === "/opportunities" && m === "POST") return ok({ status: "created", id: "o20" });
   if (p === "/catalog/capabilities") return ok([{ id: "c1", name: "Web design", category: "Technology" }]);
   if (p === "/catalog/departments") return ok(["Web Development", "Music"]);
   if (p === "/youth/login") return ok({ access_token: "yt" });
@@ -69,7 +71,9 @@ const API = (m, u, h, body) => {
   if (p === "/admin/staff/s1/role") return ok({ id: "s1", role: "finance" });
   if (p.startsWith("/admin/report")) return ok({ month: "2026-10", people_joined: 5, businesses_joined: 2, jobs_posted: 3, work_submitted: 4, field_cards: 2, work_approved: 1, money_invoiced: 500, money_received: 450, paid_to_youth: 300, places: [{ location: "Maun", people: 3 }], total: { people: 21, businesses: 3, verified_skills: 4, jobs_done: 2 }, text: "BSTM Activation, 2026-10" });
   if (p === "/admin/agent/people") return ok([{ id: "p9", name: "Lesego K", phone: "+26772345678", location: "Gumare", created_at: "2026-10-30T00:00:00Z", must_change_password: true }]);
-  if (p === "/admin/agent/people/p9/work") return ok([{ assignment_id: "a7", opportunity_title: "Paint sign", status: "Pending" }]);
+  if (p === "/admin/agent/people/p9/trials") return ok([]);
+  if (p === "/admin/agent/people/p9/work/a8/start") return ok({ status: "active" });
+  if (p === "/admin/agent/people/p9/work") return ok([{ assignment_id: "a7", opportunity_title: "Paint sign", status: "Pending" }, { assignment_id: "a8", opportunity_title: "Survey shops", status: "Accepted", trial_id: null }]);
   if (p === "/admin/agent/people/p9/jobs") return ok([{ opportunity_id: "o7", title: "Sell airtime", business_name: "Spaza", budget: 50, required_skills: ["Sales"] }]);
   if (p === "/admin/agent/people/p9/apply/o7") return ok({ status: "applied" });
   if (p === "/admin/agent/register") return ok({ id: "p10", temporary_password: "ABCD-2345" });
@@ -213,7 +217,9 @@ check("owner changes a role", seen.some((s) => s.p === "/admin/staff/s1/role" &&
 check("team lists staff, built-in owner, pending request", (await text("tau@bstm.test")) && (await text("Owner (built in)")) && (await text("Waiting for approval")));
 await tab("Register"); await page.waitForSelector("text=Register a person"); await a11y("agent register"); await page.fill("[name=name]", "Neo M"); await page.fill("[name=phone]", "71234567"); await page.fill("[name=location]", "Maun"); await page.locator("#f_cons").check(); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD-2345"); check("agent registers person and sees temp password", (await text("Lesego K")) && seen.some((s) => s.p === "/admin/agent/register" && s.body.consent === true));
 await click("Help with jobs and proof"); await page.waitForSelector("text=Sell airtime"); await click("Apply for Lesego"); await page.waitForTimeout(300); check("agent applies for a person", seen.some((s) => s.p === "/admin/agent/people/p9/apply/o7") && (await text("Paint sign")));
+await click("Start the work for them"); await page.waitForTimeout(300); check("agent starts work for a person", seen.some((s) => s.p === "/admin/agent/people/p9/work/a8/start"));
 await click("← Back");
+await tab("Businesses"); await page.waitForSelector("text=Spaza One"); await click("Post a job for them"); await page.fill("[name=title]", "Fix till"); await click("Web design"); await page.locator("form button[type=submit]").click(); await page.waitForTimeout(300); check("staff posts a job with skills", seen.some((s) => s.p === "/opportunities" && s.m === "POST" && s.body.skills && s.body.skills.length === 1 && s.body.title === "Fix till"));
 await tab("Reports"); await page.waitForSelector("text=New people"); check("report shows month numbers", (await text("Copy summary")) && (await text("Maun")));
 await tab("System"); await page.waitForSelector("text=System check");
 check("system check lists measured items", await text("Ledger balance"));

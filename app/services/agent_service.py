@@ -86,3 +86,25 @@ def person_evidence(agent_key, agent_name, youth_id, data):
     out = submit_my_evidence(youth_id, data)
     _log("evidence_added_by_agent", youth_id, agent_name)
     return out
+
+
+def person_trials(agent_key, youth_id):
+    from app.services.trial_service import list_youth_trials
+    youth_id, _ = _own_person(agent_key, youth_id)
+    return list_youth_trials(youth_id)
+
+
+def person_start_work(agent_key, agent_name, youth_id, assignment_id):
+    from app.api.service import create_my_trial
+    youth_id, _ = _own_person(agent_key, youth_id)
+    out = create_my_trial(youth_id, assignment_id)
+    _log("work_started_by_agent", youth_id, agent_name)
+    return out
+
+
+def person_submit_trial(agent_key, agent_name, youth_id, trial_id, submission):
+    from app.api.service import submit_my_trial
+    youth_id, _ = _own_person(agent_key, youth_id)
+    out = submit_my_trial(youth_id, trial_id, submission)
+    _log("trial_submitted_by_agent", youth_id, agent_name)
+    return out

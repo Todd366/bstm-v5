@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.16.0
+- Staff can post a job for any business (Businesses -> Post a job for them) and pick the skills it needs; suggested jobs from an audit also take skills now.
+- Agents can start work and submit the full 100 Trials field card for a person they registered. Each step is logged as done by the agent; ownership is checked every time (tested).
+- No database change.
+
 ## 5.15.0
 - Fix: deleting an account now also removes the phone number (and agent tag), so the number is private and can be used again. Data export includes the phone number.
 - New: **Issue corrected invoice**. After a wrong invoice is cancelled, staff can issue the right one for the same job (one live invoice per job, tested).
