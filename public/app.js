@@ -860,6 +860,7 @@
         show1.addEventListener("click", function () { busy(show1, loadPeople(o, out)).catch(fail); });
         card.appendChild(show1);
         if (o.status === "Open") bAct(card, "Close job", "/biz/opportunities/" + o.id + "/close", {}, "sec", "Job closed.");
+        if (o.status === "Completed") bAct(card, "Post this job again", "/biz/opportunities/" + o.id + "/repeat", {}, "", "Posted again. BSTM will approve it soon.");
         node.appendChild(card);
       });
       show(node);

@@ -72,3 +72,23 @@ def test_business_accepting_while_person_withdraws_ends_in_one_state(test_databa
     ok, errs = _race([lambda: assignment_service.accept_assignment(aid), lambda: assignment_service.cancel_assignment(aid, acting_youth_id=yid)])
     final = assignment_service.get_assignment(aid)["status"]
     assert final in ("Accepted", "Cancelled") and len(ok) + len(errs) == 2 and len(ok) >= 1
+
+
+def test_business_can_post_a_finished_job_again_with_same_skills(test_database):
+    from app.api.service import repeat_biz_job
+    web = capability_service.create_capability("Poster Design", "Creative")
+    bid = business_service.create_business("Repeat Shop", "O", "Retail", "Maun", "x", email="repeat@example.com", password=PW)
+    other = business_service.create_business("Other Repeat", "O", "Retail", "Maun", "x", email="repeat2@example.com", password=PW)
+    oid = opportunity_service.create_opportunity(bid, "Make a poster", "A4 poster", None, 200, skills=[web])
+    with pytest.raises(Conflict):
+        repeat_biz_job(bid, oid)                                   # still open
+    yid = create_youth(name="Poster Maker")
+    aid = assignment_service.create_assignment(yid, oid, mode="application")
+    assignment_service.accept_assignment(aid)
+    finish_work(aid)
+    with pytest.raises(ValueError):
+        repeat_biz_job(other, oid)                                 # not theirs
+    new = repeat_biz_job(bid, oid)["id"]
+    row = [o for o in opportunity_service.list_opportunities() if o["id"] == new][0]
+    assert row["title"] == "Make a poster" and row["approval_status"] == "Pending" and float(row["budget"]) == 200.0
+    assert row["required_skills"] == ["Poster Design"]

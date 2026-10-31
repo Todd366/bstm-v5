@@ -666,6 +666,29 @@ def post_biz_job(business_id, data):
     return {"status": "pending_approval", "id": opportunity_id}
 
 
+def repeat_biz_job(business_id, opportunity_id):
+    """Post a finished job again (same wording, budget and skills). It goes to
+    BSTM for approval like any new job, and only a Completed job of the
+    caller's own can be repeated."""
+    from app.core.errors import Conflict
+    from app.db.database import transaction
+
+    opportunity_id = require_uuid(opportunity_id, "Job")
+    with transaction() as db:
+        old = db.execute(
+            "SELECT title, description, department, budget, status FROM opportunities WHERE id = ? AND business_id = ?",
+            (opportunity_id, business_id),
+        ).fetchone()
+        if not old:
+            raise ValueError("Job not found")
+        if old["status"] != "Completed":
+            raise Conflict("You can post a job again once it is completed")
+        skills = [str(r["capability_id"]) for r in db.execute(
+            "SELECT capability_id FROM opportunity_requirements WHERE opportunity_id = ?", (opportunity_id,)).fetchall()]
+    return post_biz_job(business_id, {"title": old["title"], "description": old["description"], "department": old["department"],
+                                      "budget": float(old["budget"] or 0), "skills": skills})
+
+
 def get_biz_people(business_id, opportunity_id):
     return list_own_applicants(business_id, opportunity_id)
 

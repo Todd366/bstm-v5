@@ -15,6 +15,7 @@ from app.api.service import (
     get_biz_profile,
     post_biz_job,
     read_biz_notifications,
+    repeat_biz_job,
     submit_biz_payment,
 )
 from app.routes.common import service_call
@@ -86,3 +87,8 @@ def approve_work_route(trial_id: str, payload: BizApprove, request: Request):
 @router.post("/opportunities/{opportunity_id}/close")
 def close_job_route(opportunity_id: str, request: Request):
     return service_call(biz_close_job, _bid(request), opportunity_id)
+
+
+@router.post("/opportunities/{opportunity_id}/repeat", status_code=201)
+def repeat_job(opportunity_id: str, request: Request):
+    return service_call(repeat_biz_job, _bid(request), opportunity_id)

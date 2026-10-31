@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.16.0)
+## Current state (v5.17.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -23,7 +23,7 @@ Not done: see Phase 3-5.
 ## Phase 1: Old-file review (done in v5.5.1)
 Reviewed in `docs/archive/OLD_FILES_REVIEW.md`; originals in `docs/archive/legacy/`.
 - [x] Skill gaps ported ("Skills to add next").
-- [ ] Cascade: after a job completes, suggest the next job for that business (needs paying history first).
+- [~] Cascade: repeat a finished job in one tap (v5.17.0). [ ] Suggest a different next job from the audit once there is paying history.
 - [ ] Business audit area -> department routing, once job postings carry structured requirements.
 
 ## Phase 2: Bug hunt (continuous; first pass in `AUDIT_2026-10-28.md`)

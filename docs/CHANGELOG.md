@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.17.0
+- Business: **Post this job again** on any completed job. Copies title, details, budget and required skills, goes to BSTM approval. Only your own completed jobs (tested).
+- No database change.
+
 ## 5.16.0
 - Staff can post a job for any business (Businesses -> Post a job for them) and pick the skills it needs; suggested jobs from an audit also take skills now.
 - Agents can start work and submit the full 100 Trials field card for a person they registered. Each step is logged as done by the agent; ownership is checked every time (tested).
