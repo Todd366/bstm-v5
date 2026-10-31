@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.18.0
+- Shop owners can register and log in with a phone number (email optional), like young people. Staff reset codes work by phone too. Phone numbers are checked as Botswana numbers and kept unique.
+- Migration `20261031000000_business_phone_login.sql` (tap Update database). Older free-text numbers are left alone.
+
 ## 5.17.0
 - Business: **Post this job again** on any completed job. Copies title, details, budget and required skills, goes to BSTM approval. Only your own completed jobs (tested).
 - No database change.

@@ -30,3 +30,19 @@ def test_signup_login_duplicate_and_reset_by_phone(test_database):
     reset_service.redeem_reset_code("youth", "+26771234567", code, "brand-new-password-1")
     assert authenticate_youth("71234567", "brand-new-password-1") == yid
     assert youth_service.get_youth(yid)["phone"] == "+26771234567"
+
+
+def test_business_phone_signup_login_reset_and_duplicates(test_database):
+    from app.services import business_service
+    bid = business_service.create_business("Phone Spaza", "Ana", "Retail", "Gumare", "Stock", phone="071 999 888", password="correct-horse-battery")
+    assert business_service.authenticate_business("71999888", "correct-horse-battery") == bid
+    assert business_service.authenticate_business("+267 71 999 888", "correct-horse-battery") == bid
+    with pytest.raises(ValueError):
+        business_service.authenticate_business("71999888", "wrong-password-here")
+    with pytest.raises(Exception):
+        business_service.create_business("Another Spaza", "Bo", "Retail", "Shakawe", "Stock", phone="71999888")
+    with pytest.raises(ValueError):                                  # account needs email or phone
+        business_service.create_business("No Contact", "Cy", "Retail", "Maun", "Stock", password="correct-horse-battery")
+    code = reset_service.create_reset_code("business", "71999888")["code"]
+    reset_service.redeem_reset_code("business", "+26771999888", code, "brand-new-password-2")
+    assert business_service.authenticate_business("71999888", "brand-new-password-2") == bid

@@ -779,10 +779,10 @@
       h("datalist", { id: "places" }, PLACES.map(function (p) { return h("option", { value: p }); })),
       h("div", null, h("label", { for: "f_problem", text: "What is your biggest problem?" }), h("textarea", { id: "f_problem", name: "main_problem", maxlength: 1000 })),
       h("h2", { text: staff ? "Account (optional)" : "Your account" }),
-      field("Phone", "phone", "tel", { ac: "tel", max: 30, im: "tel" }),
-      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }),
+      field("Phone number", "phone", "tel", { ac: "tel", max: 30, im: "tel", ph: "71 234 567" }),
+      field("Email (optional if you give a phone number)", "email", "email", { ac: "email", max: 254, im: "email" }),
       field("Password", "password", "password", { ac: "new-password", max: 128 }),
-      h("p", { class: "m", text: staff ? "Leave email and password empty to register the business without an account." : "You will use your email and password to post jobs, hire, and pay. At least 8 characters." }),
+      h("p", { class: "m", text: staff ? "Leave password empty to register the business without an account." : "You will log in with your phone number or email and this password to post jobs, hire, and pay. At least 8 characters." }),
       err, h("button", { class: "btn", type: "submit", text: staff ? "Register" : "Get help" }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: staff ? route : landing }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";
@@ -791,9 +791,12 @@
       if (!body.name || !body.owner || !body.location || !body.main_problem) return (err.textContent = "Please fill in the business details.");
       if (phone) body.phone = phone;
       if (email || pw || !staff) {
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return (err.textContent = "Enter a valid email address.");
+        if (!email && !phone) return (err.textContent = "Enter a phone number or an email address.");
+        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return (err.textContent = "Enter a valid email address.");
+        if (phone && !/^(\+?267|0)?\s?[3-7](\s?\d){7}$/.test(phone)) return (err.textContent = "Enter a Botswana phone number like 71 234 567.");
         if (pw.length < 8) return (err.textContent = "Password must be at least 8 characters.");
-        body.email = email; body.password = pw;
+        if (email) body.email = email;
+        body.password = pw;
       }
       busy(f.querySelector("button[type=submit]"), api("/businesses", { anon: true, body: body })).then(function (r) {
         var diag = (r.diagnosis || []).map(function (d) { return h("div", { class: "card" }, h("h3", { text: d.title }), h("p", { class: "m", text: "BSTM department: " + d.department })); });
@@ -823,7 +826,7 @@
   function bizLoginScreen() {
     var err = h("p", { class: "err", role: "alert" });
     var f = h("form", { class: "card", novalidate: true }, h("h1", { text: t("Log in as business") }),
-      field("Email", "email", "email", { ac: "email", max: 254, im: "email" }), field("Password", "password", "password", { ac: "current-password", max: 128 }), err,
+      field("Email or phone number", "email", "text", { ac: "username", max: 254 }), field("Password", "password", "password", { ac: "current-password", max: 128 }), err,
       h("button", { class: "btn", type: "submit", text: t("Log in") }), h("button", { class: "btn sec", type: "button", text: "Forgot password?", onclick: function () { resetScreen("business"); } }), h("button", { class: "btn sec", type: "button", text: t("Back"), onclick: landing }));
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); err.textContent = "";

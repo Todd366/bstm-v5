@@ -24,8 +24,8 @@ def _hash(code):
 
 
 def _find(db, account_type, ident):
-    """Youth can be found by email or phone; businesses by email."""
-    kind, v = split_login_id(ident) if account_type == "youth" else ("email", clean_email(ident))
+    """People and businesses can be found by email or phone."""
+    kind, v = split_login_id(ident)
     where = "lower(email) = lower(?)" if kind == "email" else "phone = ?"
     return db.execute("SELECT id FROM " + TABLES[account_type] + " WHERE " + where, (v,)).fetchone()
 

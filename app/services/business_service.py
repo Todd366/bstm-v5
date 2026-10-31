@@ -4,7 +4,7 @@ import psycopg2
 
 from app.core.errors import Conflict
 from app.core.config import RATE_LOGIN_PER_15MIN_ACCOUNT
-from app.core.validation import clean_email, clean_text, require_uuid
+from app.core.validation import clean_email, clean_phone, clean_text, require_uuid, split_login_id
 from app.db.database import transaction
 from app.services.auth_service import (
     burn_verification_time,
@@ -42,11 +42,16 @@ def create_business(
     sector = clean_text(sector, "Sector", 100)
     location = clean_text(location, "Location", 120)
     main_problem = clean_text(main_problem, "Main problem", 1000)
-    phone = clean_text(phone, "Phone", 30, required=False)
+    phone = clean_phone(phone) if phone and str(phone).strip() else None
     password_hash = None
 
     if password:
-        email = clean_email(email)
+        if email and str(email).strip():
+            email = clean_email(email)
+        elif phone:
+            email = None
+        else:
+            raise ValueError("Enter an email address or a phone number")
         validate_password(password)
         password_hash = hash_password(password)
     elif email:
@@ -66,6 +71,9 @@ def create_business(
 
             if existing:
                 raise Conflict("This business is already registered at that location")
+
+            if phone and db.execute("SELECT id FROM businesses WHERE phone = ?", (phone,)).fetchone():
+                raise Conflict("A business with this phone number is already registered")
 
             row = db.execute(
                 """
@@ -186,13 +194,20 @@ def authenticate_business(email, password):
     if not email or not password or len(password) > 128 or len(email) > 254:
         raise ValueError("Invalid email or password")
 
-    check_rate_limit(hash_key("biz:" + email.lower()), "login-account", RATE_LOGIN_PER_15MIN_ACCOUNT, 15)
+    try:
+        kind, ident = split_login_id(email)
+    except ValueError:
+        burn_verification_time(password)
+        raise ValueError("Invalid email or password")
+
+    check_rate_limit(hash_key("biz:" + ident.lower()), "login-account", RATE_LOGIN_PER_15MIN_ACCOUNT, 15)
 
     with transaction() as db:
 
         row = db.execute(
-            "SELECT id, password_hash FROM businesses WHERE lower(email) = lower(?)",
-            (email,),
+            "SELECT id, password_hash FROM businesses WHERE "
+            + ("lower(email) = lower(?)" if kind == "email" else "phone = ?"),
+            (ident,),
         ).fetchone()
 
         if not row or not row["password_hash"]:

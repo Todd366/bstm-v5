@@ -23,3 +23,4 @@ Update this file only with things that were actually checked.
 
 - 2026-10-30 first-load payload (gzip): app.js 30 KB, css 1.4 KB, html 0.5 KB = about 33 KB, under the 150 KB budget; a test now fails the build if it grows past 150 KB.
 - 2026-10-30 concurrency: two simultaneous confirms of one payment and two simultaneous payout marks each succeed once (tests/test_concurrency.py, real Postgres 16).
+- 2026-10-31 live check: /health 5.17.0 ok; public skills catalog serves 41 skills; admin routes refuse unauthenticated calls.
