@@ -15,7 +15,7 @@ def export_youth(youth_id):
 
     queries = {
         "profile": "SELECT id, name, location, passion, goal, availability, equipment, level, capability_score, "
-                   "learning_score, reputation_score, reliability_score, completed_trials, revenue, email, intake, bio, "
+                   "learning_score, reputation_score, reliability_score, completed_trials, revenue, email, phone, registered_by, intake, bio, "
                    "public_profile, created_at FROM youth WHERE id = ?",
         "capabilities": "SELECT * FROM youth_capabilities WHERE youth_id = ?",
         "assignments": "SELECT * FROM opportunity_assignments WHERE youth_id = ?",
@@ -79,7 +79,7 @@ def delete_youth(youth_id, password):
             """
             UPDATE youth SET name = 'Deleted member', location = 'Deleted', goal = 'Deleted', passion = NULL,
                 availability = NULL, equipment = NULL, intake = NULL, bio = NULL, public_profile = false,
-                email = NULL, password_hash = NULL, deleted_at = now(), updated_at = now()
+                email = NULL, phone = NULL, registered_by = NULL, must_change_password = false, password_hash = NULL, deleted_at = now(), updated_at = now()
             WHERE id = ?
             """,
             (youth_id,),

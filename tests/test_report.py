@@ -37,3 +37,15 @@ def test_first_load_stays_small():
     import gzip, pathlib
     total = sum(len(gzip.compress(p.read_bytes())) for p in pathlib.Path("public").iterdir() if p.suffix in (".js", ".css", ".html", ".svg", ".webmanifest"))
     assert total < 150 * 1024, total
+
+
+def test_report_by_town_and_staff_job_list_shows_skills(test_database):
+    from app.services import business_service, capability_service, opportunity_service
+    web = capability_service.create_capability("Web Design", "Technology")
+    bid = business_service.create_business("Town Shop", "O", "Retail", "Kasane", "x", email="town@example.com", password="correct-horse-battery")
+    oid = opportunity_service.create_opportunity(bid, "Site", "d", None, 100, skills=[web])
+    towns = {t["town"]: t for t in report_service.monthly_report()["towns"]}
+    assert towns["Kasane"]["jobs"] == 1
+    listed = [o for o in opportunity_service.list_opportunities() if o["id"] == oid][0]
+    assert listed["required_skills"] == ["Web Design"]
+    assert "town: Kasane jobs" in report_service.report_csv(report_service.monthly_report())

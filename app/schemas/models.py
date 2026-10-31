@@ -267,3 +267,7 @@ class AgentRegister(BaseModel):
 class PasswordChange(BaseModel):
     current: str = Field(..., max_length=128)
     new: str = Field(..., max_length=128)
+
+
+class ReissueInvoice(BaseModel):
+    amount: float = Field(..., gt=0, le=10000000)

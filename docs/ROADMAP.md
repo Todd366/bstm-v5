@@ -10,7 +10,7 @@ For anyone building this system (engineer, architect, Claude). Read this first. 
 5. Layers: `routes` (HTTP) -> `api/service.py` (use-cases) -> `services` (rules + SQL). Money and approvals always record the actor.
 6. Delivery: build in the sandbox, run `python3 shim pytest` + `tests/e2e/smoke.mjs`, commit, zip, send, give ONE Termux block. DB changes ship as a migration in `migrations/` applied by Staff -> Update database.
 
-## Current state (v5.14.1)
+## Current state (v5.15.0)
 Working and tested: register/login (youth, business, staff), matching, applications and offers, trials with evidence, approval -> job completion -> invoice -> payment -> payout, unmatched-payments inbox, staff roles, reset codes, invoice void, data export/delete, system check, in-app migrations, Setswana/English, offline shell.
 Not done: see Phase 3-5.
 
@@ -29,24 +29,24 @@ Reviewed in `docs/archive/OLD_FILES_REVIEW.md`; originals in `docs/archive/legac
 ## Phase 2: Bug hunt (continuous; first pass in `AUDIT_2026-10-28.md`)
 Method per module: read the code, write a failing test for each suspected bug, fix, keep the test.
 Known suspects to test first:
-- [x] Concurrency: two staff confirm the same payment, two mark the same payout paid (tested v5.14.1). [ ] business accepts while youth withdraws; [ ] two businesses approve the same trial.
+- [x] Concurrency: two staff confirm the same payment, two mark the same payout paid (tested v5.14.1). [x] business accepts while youth withdraws; [ ] two businesses approve the same trial.
 - [x] Support/finance no longer see youth `intake` (v5.8.0).
-- [x] Deleted youth excluded from lists and counts (v5.6.0). [ ] Confirm they vanish from matching, lists, public profile, candidate lists.
-- [ ] Invoice void then re-completion: confirm a replacement invoice is possible and idempotent.
+- [x] Deleted youth excluded from lists and counts (v5.6.0). [x] Vanish from matching, lists, public profile, candidates (tested v5.15.0; phone now cleared too).
+- [x] Invoice void then re-issue (v5.15.0, tested).
 - [x] Rate-limit table growth: old rows are deleted as part of normal checks.
 - [ ] Staff token lookup hits the DB on every staff request: measure; cache for a few seconds if slow.
 - [ ] Time zones: all dates stored UTC, displayed in Africa/Gaborone.
-- [ ] Money rounding and currency (BWP, 2 decimals) across split, payouts, reports.
+- [x] Money rounding: split always sums to the cent (tested v5.15.0).
 - [ ] Error pages and offline behaviour on slow 2G connections; payload measured 33 KB gzipped and guarded by a test; [ ] test on real 2G.
-- [ ] Accessibility: keyboard, labels, contrast, text size; test on a low-end Android.
+- [~] Accessibility: field labels checked by the browser test (v5.15.0). [ ] contrast, text size, keyboard; test on a low-end Android.
 
 ## Phase 3: Wiring left (integration)
 - [ ] Payment provider: owner's constraints are Absa savings card, DPO rejected. Candidate path: manual Orange Money / MyZaka confirm (live now) -> SMS-bridge adapter (built, needs a phone running the bridge) -> a gateway adapter once a provider accepts the business. Decision needed from owner; see project doc `payments-botswana-2026-10`.
 - [ ] Notifications beyond in-app: SMS or WhatsApp (provider decision), keep in-app as source of truth.
 - [x] Phone-number login without OTP (v5.11.0). [ ] OTP verification (needs SMS provider). [ ] Phone login for businesses.
-- [x] Structured job requirements (v5.9.0). [ ] Staff-side picker when staff post a job; [ ] show requirements to staff in the queue.
+- [x] Structured job requirements (v5.9.0). [ ] Staff-side picker when staff post a job; [x] requirements shown to staff (v5.15.0).
 - [ ] Field audit -> suggested jobs -> business confirmation loop (reuse existing audit and diagnosis services).
-- [x] Reports: monthly numbers (v5.10.0). [x] CSV export and per-agent numbers (v5.14.0). [ ] per-town breakdown of jobs and money.
+- [x] Reports: monthly numbers (v5.10.0). [x] CSV export and per-agent numbers (v5.14.0). [x] per-town breakdown (v5.15.0).
 - [ ] Public verification: shareable proof page for a youth's verified work (opt-in, exists as public profile; extend with evidence).
 
 ## Phase 4: Production hardening

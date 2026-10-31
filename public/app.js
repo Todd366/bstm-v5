@@ -496,8 +496,8 @@
     var saved = {}; try { saved = JSON.parse(localStorage.getItem(draftKey) || "{}"); } catch (e) { }
     function sec(title, note) { f.appendChild(h("h3", { text: title })); if (note) f.appendChild(h("p", { class: "m", text: note })); }
     function text(name, label, long, ph) {
-      f.appendChild(h("label", { text: label }));
-      var el = h(long ? "textarea" : "input", { name: name, maxlength: 400, placeholder: ph || "" }); el.value = saved[name] || ""; el.addEventListener("input", save); f.appendChild(el);
+      f.appendChild(h("label", { for: "fc_" + name, text: label }));
+      var el = h(long ? "textarea" : "input", { id: "fc_" + name, name: name, maxlength: 400, placeholder: ph || "" }); el.value = saved[name] || ""; el.addEventListener("input", save); f.appendChild(el);
     }
     function pick(name, label) {
       f.appendChild(h("label", { text: label }));
@@ -514,7 +514,7 @@
     f.appendChild(h("p", { class: "m", text: "In the field I collect. Outside the field I think. Your answers save on this phone as you type." }));
     sec("1. Identification");
     text("business", "Business name"); pick("btype", "Type"); pick("size", "Size"); text("location", "Location (village / town / area)");
-    f.appendChild(h("label", { text: "Date" })); var dt = h("input", { name: "date", type: "date" }); dt.value = saved.date || today; dt.addEventListener("input", save); f.appendChild(dt);
+    f.appendChild(h("label", { for: "fc_date", text: "Date" })); var dt = h("input", { id: "fc_date", name: "date", type: "date" }); dt.value = saved.date || today; dt.addEventListener("input", save); f.appendChild(dt);
     sec("2. Entry context"); pick("entry_type", "Entry type"); pick("reaction", "Reaction"); text("first_contact", "First contact (what happened in the first minute)");
     sec("3. Core questions", "Tick each one when you asked it.");
     FC_QUESTIONS.forEach(function (q, i) {
@@ -1122,6 +1122,7 @@
         h("h2", { text: "Where new people joined from" }));
       if (!r.places.length) node.appendChild(empty("Nobody joined this month."));
       r.places.forEach(function (p) { node.appendChild(h("p", { class: "m", text: p.location + " · " + p.people })); });
+      if (r.towns && r.towns.length) { node.appendChild(h("h2", { text: "Jobs by town (where the business is)" })); r.towns.forEach(function (t2) { node.appendChild(h("p", { class: "m", text: t2.town + " · " + t2.jobs + " jobs posted · " + t2.approved + " work approved · " + pula(t2.money) + " received" })); }); }
       if (r.agents && r.agents.length) { node.appendChild(h("h2", { text: "Field agents" })); r.agents.forEach(function (a) { node.appendChild(h("p", { class: "m", text: a.name + " · registered " + a.registered + " · chose own password " + a.chose_own_password })); }); }
       node.appendChild(h("h2", { text: "All time" }));
       node.appendChild(h("p", { class: "m", text: r.total.people + " people · " + r.total.businesses + " businesses · " + r.total.verified_skills + " verified skills · " + r.total.jobs_done + " jobs done" }));
@@ -1369,7 +1370,8 @@
   }
   function approvalCard(j, id) {
     var card = h("div", { class: "card" }, h("h3", { text: j.title }), h("p", { class: "m", text: [j.business_name, j.business_location, j.department, money(j.budget)].filter(Boolean).join(" · ") }),
-      j.description ? h("p", { text: j.description }) : null);
+      j.description ? h("p", { text: j.description }) : null,
+      j.required_skills && j.required_skills.length ? h("p", { class: "m", text: "Skills needed: " + j.required_skills.join(", ") }) : null);
     var ok = h("button", { class: "btn sm", type: "button", text: "Approve" });
     ok.addEventListener("click", function () { busy(ok, A("/opportunities/" + id + "/approval", { approved: true })).then(function () { say("Job is live."); route(); }).catch(fail); });
     card.appendChild(ok);
@@ -1408,6 +1410,14 @@
             busy(vb, A("/invoices/" + i.id + "/void", { reason: reason.trim() })).then(function () { say("Invoice cancelled."); route(); }).catch(fail);
           });
           card.appendChild(vb);
+        }
+        if (i.status === "Void" && i.can_reissue) {
+          var rb = h("button", { class: "btn sm", type: "button", text: "Issue corrected invoice" });
+          rb.addEventListener("click", function () {
+            var amt = Number(window.prompt("Correct amount in Pula for this job?")); if (!(amt > 0)) return;
+            busy(rb, A("/invoices/" + i.id + "/reissue", { amount: amt })).then(function () { say("Corrected invoice issued."); route(); }).catch(fail);
+          });
+          card.appendChild(rb);
         }
         node.appendChild(card);
       });
@@ -1455,7 +1465,7 @@
       list.forEach(function (o) {
         var out = h("div");
         if (o.approval_status === "Pending") { list_cards.push(approvalCard(o, o.id)); return; }
-        var card = h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.business_name, o.department, money(o.budget)].filter(Boolean).join(" · ") }), h("span", { class: "tag", text: o.status }), o.approval_status === "Rejected" ? h("span", { class: "tag", text: "Rejected" }) : null, out);
+        var card = h("div", { class: "card" }, h("h3", { text: o.title }), h("p", { class: "m", text: [o.business_name, o.department, money(o.budget)].filter(Boolean).join(" · ") }), o.required_skills && o.required_skills.length ? h("p", { class: "m", text: "Skills needed: " + o.required_skills.join(", ") }) : null, h("span", { class: "tag", text: o.status }), o.approval_status === "Rejected" ? h("span", { class: "tag", text: "Rejected" }) : null, out);
         var btn = h("button", { class: "btn sm sec", type: "button", text: "People on this job" });
         btn.addEventListener("click", function () {
           busy(btn, A("/opportunities/" + o.id + "/assignments")).then(function (as) {

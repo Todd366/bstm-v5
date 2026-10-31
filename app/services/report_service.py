@@ -54,6 +54,19 @@ def monthly_report(month=None):
                 (start, end),
             ).fetchall()
         ]
+        town = "coalesce(nullif(trim(%s.location), ''), 'Not given')"
+        jobs = {row["t"]: row["n"] for row in db.execute(
+            "SELECT " + town % "b" + " AS t, count(*) AS n FROM opportunities o JOIN businesses b ON b.id = o.business_id "
+            "WHERE o.created_at >= %s AND o.created_at < %s GROUP BY 1" % (lo, hi), (start, end)).fetchall()}
+        done = {row["t"]: row["n"] for row in db.execute(
+            "SELECT " + town % "b" + " AS t, count(*) AS n FROM trials t JOIN opportunity_assignments oa ON oa.id = t.assignment_id "
+            "JOIN opportunities o ON o.id = oa.opportunity_id JOIN businesses b ON b.id = o.business_id "
+            "WHERE t.completed_at >= %s AND t.completed_at < %s GROUP BY 1" % (lo, hi), (start, end)).fetchall()}
+        paid = {row["t"]: float(row["n"] or 0) for row in db.execute(
+            "SELECT " + town % "b" + " AS t, sum(i.amount) AS n FROM invoices i JOIN businesses b ON b.id = i.business_id "
+            "WHERE i.status = 'Paid' AND i.paid_at >= %s AND i.paid_at < %s GROUP BY 1" % (lo, hi), (start, end)).fetchall()}
+        names = sorted(set(jobs) | set(done) | set(paid), key=lambda t: (-jobs.get(t, 0), t))[:15]
+        r["towns"] = [{"town": t, "jobs": jobs.get(t, 0), "approved": done.get(t, 0), "money": paid.get(t, 0.0)} for t in names]
         r["agents"] = [
             {"name": row["name"], "registered": row["registered"], "chose_own_password": row["active"]}
             for row in db.execute(
@@ -94,6 +107,7 @@ def report_csv(r):
               "money_invoiced", "money_received", "paid_to_youth"):
         rows.append((k, r[k]))
     rows += [("place: " + p["location"], p["people"]) for p in r["places"]]
+    rows += [("town: " + t["town"] + " jobs", t["jobs"]) for t in r["towns"]]
     rows += [("agent: " + a["name"] + " registered", a["registered"]) for a in r["agents"]]
     rows += [("total_" + k, v) for k, v in r["total"].items()]
     esc = lambda v: '"' + str(v).replace('"', '""') + '"'

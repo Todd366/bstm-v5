@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.15.0
+- Fix: deleting an account now also removes the phone number (and agent tag), so the number is private and can be used again. Data export includes the phone number.
+- New: **Issue corrected invoice**. After a wrong invoice is cancelled, staff can issue the right one for the same job (one live invoice per job, tested).
+- Reports: Jobs by town (where the business is): jobs posted, work approved, money received; included in the CSV.
+- Staff Jobs and approval cards show the skills a job needs.
+- Accessibility: every field on the trial card now has a proper label; the browser test fails if any field on the work or agent screens has none.
+- Tests: deleted people vanish from matching, lists and public profile; money split always adds to the cent (333.33, 0.05, 1234.57...); business accepting while the person withdraws ends in one state.
+- No database change.
+
 ## 5.14.1
 - Tests only: two staff pressing Confirm on the same payment, or Mark paid on the same payout, at the same instant on real Postgres. Exactly one succeeds, one payout is created, money is counted once. No behaviour change.
 

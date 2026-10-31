@@ -157,7 +157,17 @@ def list_opportunities(limit=100, offset=0, status=None, approval=None):
             (status, status, approval, approval, limit, offset),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+        from app.services.matching_service import _requirements
+
+        reqs = _requirements(db, [r["id"] for r in rows])
+
+    out = []
+    for row in rows:
+        row = dict(row)
+        row["required_skills"] = sorted(reqs.get(str(row["id"]), {}).values())
+        out.append(row)
+
+    return out
 
 
 def browse_open_opportunities(youth_id, limit=50, offset=0, q=None, location=None, department=None):

@@ -115,7 +115,9 @@ def list_invoices(business_id=None, status=None, limit=50, offset=0):
                    COALESCE((SELECT sum(p.amount) FROM payments p
                              WHERE p.invoice_id = i.id AND p.status = 'Confirmed'), 0) AS paid_amount,
                    (SELECT count(*) FROM payments p
-                    WHERE p.invoice_id = i.id AND p.status = 'Submitted') AS pending_payments
+                    WHERE p.invoice_id = i.id AND p.status = 'Submitted') AS pending_payments,
+                   (i.status = 'Void' AND i.assignment_id IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM invoices r WHERE r.assignment_id = i.assignment_id AND r.status <> 'Void')) AS can_reissue
             FROM invoices i
             JOIN businesses b ON b.id = i.business_id
             LEFT JOIN opportunities o ON o.id = i.opportunity_id
@@ -676,3 +678,40 @@ def void_invoice(invoice_id, reason, voided_by="staff"):
                invoice["reference"] + " was cancelled by BSTM. Reason: " + reason)
 
     return str(invoice_id)
+
+
+def reissue_invoice(invoice_id, amount, reissued_by="staff"):
+    """After a wrong invoice was voided: issue the corrected one for the same
+    job and people. Only one live invoice per job (database rule + this check)."""
+
+    invoice_id = require_uuid(invoice_id, "Invoice")
+    amount = money(amount)
+
+    if amount <= 0:
+        raise ValueError("Enter an amount above zero")
+
+    with transaction() as db:
+        old = db.execute(
+            "SELECT id, reference, business_id, youth_id, opportunity_id, assignment_id, status FROM invoices WHERE id = ? FOR UPDATE",
+            (invoice_id,),
+        ).fetchone()
+
+        if not old:
+            raise ValueError("Invoice not found")
+
+        if old["status"] != "Void" or not old["assignment_id"]:
+            raise Conflict("Only a cancelled invoice can be re-issued")
+
+        live = db.execute(
+            "SELECT count(*) AS n FROM invoices WHERE assignment_id = ? AND status <> 'Void'", (old["assignment_id"],)
+        ).fetchone()["n"]
+
+        if live:
+            raise Conflict("This job already has a live invoice")
+
+        new_id = create_invoice_in_tx(db, old["assignment_id"], old["business_id"], old["youth_id"],
+                                      old["opportunity_id"], amount, 0.70)
+        _log(db, "invoice_reissued", old["business_id"], new_id,
+             {"replaces": old["reference"], "amount": amount, "by": reissued_by})
+
+    return str(new_id)

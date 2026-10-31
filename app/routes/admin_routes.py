@@ -22,6 +22,7 @@ from app.api.service import (
     issue_reset_code,
     set_staff_active,
     void_invoice,
+    reissue_invoice,
     whoami,
     get_migration_status,
     run_migrations,
@@ -90,6 +91,7 @@ from app.schemas.models import (
     StaffApprove,
     StaffCreate,
     VoidInvoice,
+    ReissueInvoice,
     ApprovalDecision,
     PaymentReject,
     PaymentSubmit,
@@ -503,6 +505,11 @@ def report(month: str = ""):
 @router.get("/admin/scorecard")
 def scorecard():
     return service_call(get_scorecard)
+
+
+@router.post("/invoices/{invoice_id}/reissue", status_code=201)
+def invoice_reissue(invoice_id: str, payload: ReissueInvoice, request: Request):
+    return service_call(reissue_invoice, invoice_id, payload.dict(), _actor(request))
 
 
 @router.post("/invoices/{invoice_id}/void")

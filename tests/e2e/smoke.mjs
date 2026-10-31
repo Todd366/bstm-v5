@@ -119,6 +119,17 @@ await page.waitForSelector("text=Hello, Thobo");
 check("youth home", await text("Hello, Thobo"));
 check("home shows ledger label 'Paid to you'", await text("Paid to you"));
 check("bell shows unread count", (await page.locator("#bellN").textContent()) === "2");
+
+async function a11y(label) {
+  const bad = await page.evaluate(() => [...document.querySelectorAll("input:not([type=hidden]):not([type=checkbox]), select, textarea")].filter((el) => {
+    if (el.getAttribute("aria-label")) return false;
+    if (el.id && document.querySelector('label[for="' + el.id + '"]')) return false;
+    return !el.closest("label");
+  }).map((el) => el.name || el.type || el.tagName));
+  check("every field has a label: " + label, bad.length === 0);
+  if (bad.length) console.log("   unlabelled:", bad.join(", "));
+}
+
 await tab("Money");
 await page.waitForSelector("text=Waiting for business");
 check("money: totals + payout form + payouts", (await text("Add where we should pay you")) && (await text("Being prepared")) && (await text("MZ-77")));
@@ -139,7 +150,7 @@ await click("All open"); await page.waitForSelector("text=Fix website");
 await page.fill("[name=q]", "web"); await page.fill("[name=location]", "Maun");
 await page.getByRole("button", { name: "Search" }).click(); await page.waitForTimeout(300);
 check("job search sends q + location", seen.some((s) => s.p === "/me/opportunities/browse" && s.q.includes("q=web") && s.q.includes("location=Maun")));
-await tab("My work"); await page.waitForSelector("text=Paint wall");
+await tab("My work"); await page.waitForSelector("text=Paint wall"); await a11y("work screen");
 check("my work: submit form, stop work, done message", (await text("Submit trial")) && (await text("Exit snapshot")) && (await text("Raw quotes")) && (await text("Stop this work")) && (await text("See Money")));
 await page.locator("#bellBtn").click(); await page.waitForSelector("text=You got the job");
 check("alerts list", await text("You got the job"));
@@ -200,7 +211,7 @@ await tab("Team"); await page.waitForSelector("text=Add a team member");
 await page.locator("select[aria-label='Change role']").first().selectOption("finance"); await click("Change role"); await page.waitForTimeout(300);
 check("owner changes a role", seen.some((s) => s.p === "/admin/staff/s1/role" && s.body.role === "finance"));
 check("team lists staff, built-in owner, pending request", (await text("tau@bstm.test")) && (await text("Owner (built in)")) && (await text("Waiting for approval")));
-await tab("Register"); await page.waitForSelector("text=Register a person"); await page.fill("[name=name]", "Neo M"); await page.fill("[name=phone]", "71234567"); await page.fill("[name=location]", "Maun"); await page.locator("#f_cons").check(); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD-2345"); check("agent registers person and sees temp password", (await text("Lesego K")) && seen.some((s) => s.p === "/admin/agent/register" && s.body.consent === true));
+await tab("Register"); await page.waitForSelector("text=Register a person"); await a11y("agent register"); await page.fill("[name=name]", "Neo M"); await page.fill("[name=phone]", "71234567"); await page.fill("[name=location]", "Maun"); await page.locator("#f_cons").check(); await page.locator("form button[type=submit]").click(); await page.waitForSelector("text=ABCD-2345"); check("agent registers person and sees temp password", (await text("Lesego K")) && seen.some((s) => s.p === "/admin/agent/register" && s.body.consent === true));
 await click("Help with jobs and proof"); await page.waitForSelector("text=Sell airtime"); await click("Apply for Lesego"); await page.waitForTimeout(300); check("agent applies for a person", seen.some((s) => s.p === "/admin/agent/people/p9/apply/o7") && (await text("Paint sign")));
 await click("← Back");
 await tab("Reports"); await page.waitForSelector("text=New people"); check("report shows month numbers", (await text("Copy summary")) && (await text("Maun")));
